@@ -1,0 +1,130 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-sketch-bg text-sketch-line font-sans font-light antialiased;
+    margin: 0;
+  }
+
+  ::selection {
+    background: rgba(99, 68, 66, 0.25);
+    color: theme("colors.sketch.line");
+  }
+}
+
+@layer components {
+  /* 线性细描边通用样式：只描边不填充（加粗版） */
+  .sketch-stroke {
+    fill: none;
+    stroke: theme("colors.sketch.line");
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* 输入框：底部 SVG 手绘波浪线 */
+  .sketch-input {
+    @apply bg-transparent text-sketch-line font-light;
+    border: none;
+    outline: none;
+    padding: 0.4rem 0.2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 8'%3E%3Cpath d='M0,5 C15,3.5 45,6.5 60,5' fill='none' stroke='%23634442' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: repeat-x;
+    background-position: bottom;
+    background-size: 60px 8px;
+    transition: filter 0.2s ease;
+  }
+  .sketch-input::placeholder {
+    color: theme("colors.sketch.lineSub");
+  }
+  .sketch-input:focus {
+    filter: drop-shadow(0 0 1px theme("colors.sketch.line"));
+  }
+
+  /* 自定义滑块：手绘波浪轨道 + 方框滑块 */
+  .sketch-range {
+    @apply w-full appearance-none bg-transparent cursor-pointer;
+  }
+  .sketch-range::-webkit-slider-runnable-track {
+    height: 8px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 8'%3E%3Cpath d='M0,5 C15,3.5 45,6.5 60,5' fill='none' stroke='%23634442' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x center;
+    background-size: 60px 8px;
+  }
+  .sketch-range::-moz-range-track {
+    height: 8px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 8'%3E%3Cpath d='M0,5 C15,3.5 45,6.5 60,5' fill='none' stroke='%23634442' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x center;
+    background-size: 60px 8px;
+  }
+  .sketch-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -3px;
+    background: theme("colors.sketch.bg");
+    border: 1.5px solid theme("colors.sketch.line");
+    border-radius: 0;
+  }
+  .sketch-range::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: theme("colors.sketch.bg");
+    border: 1.5px solid theme("colors.sketch.line");
+    border-radius: 0;
+  }
+
+  /* 手绘波浪分隔线：横向 */
+  .sketch-hr {
+    height: 8px;
+    border: none;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 8'%3E%3Cpath d='M0,5 C15,3.5 45,6.5 60,5' fill='none' stroke='%23634442' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x center;
+    background-size: 60px 8px;
+    opacity: 0.3;
+  }
+
+  /* 波浪底边框 */
+  .sketch-border-b {
+    border: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 8'%3E%3Cpath d='M0,5 C15,3.5 45,6.5 60,5' fill='none' stroke='%23634442' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: repeat-x;
+    background-position: bottom;
+    background-size: 60px 8px;
+    padding-bottom: 8px;
+  }
+  /* 波浪顶边框 */
+  .sketch-border-t {
+    border: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 8'%3E%3Cpath d='M0,5 C15,3.5 45,6.5 60,5' fill='none' stroke='%23634442' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: repeat-x;
+    background-position: top;
+    background-size: 60px 8px;
+    padding-top: 8px;
+  }
+  /* 波浪左边框 */
+  .sketch-border-l {
+    border: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 60'%3E%3Cpath d='M5,0 C3.5,15 6.5,45 5,60' fill='none' stroke='%23634442' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: repeat-y;
+    background-position: left;
+    background-size: 8px 60px;
+    padding-left: 16px;
+  }
+}
+
+/* 页面切换淡入 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.35s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
