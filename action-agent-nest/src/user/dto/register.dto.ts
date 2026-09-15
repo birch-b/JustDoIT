@@ -15,4 +15,8 @@ export class RegisterDto {
   @IsNotEmpty()
   @Length(6, 30)
   password: string;
+
+  @IsString()
+  @IsNotEmpty({ message: '请输入邮箱验证码' })
+  code: string;
 }

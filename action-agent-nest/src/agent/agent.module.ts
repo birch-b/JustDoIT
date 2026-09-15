@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { PassportModule } from '@nestjs/passport';
 import { AgentController } from './agent.controller';
+import { TodoController } from './todo.controller';
 import { AgentService } from './agent.service';
+import { TodoService } from './todo.service';
 import { AnswerBookService } from './answerbook.service';
 import { TarotService } from './tarot.service';
 import { Task } from './entities/task.entity';
@@ -10,8 +13,12 @@ import { ActionRecord } from './entities/action-record.entity';
 import { Todo } from './entities/todo.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Task, TaskSession, ActionRecord, Todo])],
-  controllers: [AgentController],
-  providers: [AgentService, AnswerBookService, TarotService],
+  // PassportModule 让模块内的 JwtAuthGuard 能解析 AuthModuleOptions
+  imports: [
+    PassportModule.register({ defaultStrategy: 'jwt' }),
+    TypeOrmModule.forFeature([Task, TaskSession, ActionRecord, Todo]),
+  ],
+  controllers: [AgentController, TodoController],
+  providers: [AgentService, TodoService, AnswerBookService, TarotService],
 })
 export class AgentModule {}

@@ -19,5 +19,10 @@ export default () => ({
   },
   tarot: {
     apiKey: process.env.TAROT_API_KEY
+  },
+  // QQ邮箱SMTP，用于发送验证码邮件
+  mail: {
+    user: process.env.QQ_MAIL_USER,
+    authCode: process.env.QQ_MAIL_AUTH_CODE
   }
 })
