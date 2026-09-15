@@ -1,14 +1,14 @@
-// Agent 接口封装层
-// Mock 模式由 store 模拟后端返回；后端就绪后切换 useMock = false 即可请求真实接口
+// Agent 接口封装层：会话/历史/反馈走真实后端（JWT 鉴权）
+// 网络连不通时由 agentStore 走本地 mock 兜底；答案之书/塔罗牌为公开接口
 import type {
   TaskCreateReq,
   AgentSessionRes,
   ActionRecordReq,
   ActionRecord,
+  SessionCardItem,
+  HistoryDetail,
 } from "@/types";
-
-// 是否使用 mock（后端未就绪时为 true）
-const USE_MOCK = true;
+import { authRequest } from "./http";
 
 const BASE_URL = "/api/agent";
 
@@ -22,60 +22,48 @@ export interface TarotCardRes {
   imageUrl: string;
 }
 
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${url}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  if (!res.ok) {
-    throw new Error(`请求失败 ${res.status}`);
-  }
-  return (await res.json()) as T;
-}
-
 export const agentApi = {
-  /** 创建会话：POST /agent/session/create */
-  async createSession(req: TaskCreateReq): Promise<AgentSessionRes> {
-    if (USE_MOCK) {
-      // 真实接口就绪后删除此分支，落入下方 request 调用
-      throw new Error("mock 模式请走 store.agentStore.createMockSession");
-    }
-    return request<AgentSessionRes>("/session/create", {
+  /** 创建会话：POST /agent/session/create（需登录） */
+  createSession(req: TaskCreateReq): Promise<AgentSessionRes> {
+    return authRequest<AgentSessionRes>(`${BASE_URL}/session/create`, {
       method: "POST",
       body: JSON.stringify(req),
     });
   },
 
-  /** 获取会话详情：GET /agent/session/:id */
-  async getSession(sessionId: number): Promise<AgentSessionRes> {
-    if (USE_MOCK) {
-      throw new Error("mock 模式请走 store.agentStore.getMockSession");
-    }
-    return request<AgentSessionRes>(`/session/${sessionId}`);
+  /** 获取会话详情：GET /agent/session/:id（需登录） */
+  getSession(sessionId: number): Promise<AgentSessionRes> {
+    return authRequest<AgentSessionRes>(`${BASE_URL}/session/${sessionId}`);
   },
 
-  /** 提交行为反馈：POST /agent/action/record */
-  async submitActionRecord(req: ActionRecordReq): Promise<ActionRecord> {
-    if (USE_MOCK) {
-      throw new Error("mock 模式请走 store.agentStore.submitMockRecord");
-    }
-    return request<ActionRecord>("/action/record", {
+  /** 历史会话列表：GET /agent/sessions（需登录，返回完整详情数组用于卡片+统计） */
+  listSessions(): Promise<HistoryDetail[]> {
+    return authRequest<HistoryDetail[]>(`${BASE_URL}/sessions`);
+  },
+
+  /** 提交行为反馈：POST /agent/action/record（需登录） */
+  submitActionRecord(req: ActionRecordReq): Promise<ActionRecord> {
+    return authRequest<ActionRecord>(`${BASE_URL}/action/record`, {
       method: "POST",
       body: JSON.stringify(req),
     });
   },
 
-  /** 获取历史详情：GET /agent/history/:id */
-  async getHistory(sessionId: number): Promise<unknown> {
-    if (USE_MOCK) {
-      throw new Error("mock 模式请走 store.agentStore.getMockHistory");
-    }
-    return request(`/history/${sessionId}`);
+  /** 获取历史详情：GET /agent/history/:id（需登录） */
+  getHistory(sessionId: number): Promise<HistoryDetail> {
+    return authRequest<HistoryDetail>(`${BASE_URL}/history/${sessionId}`);
+  },
+
+  /** 删除会话记录：DELETE /agent/session/:id（需登录，校验归属） */
+  deleteSession(sessionId: number): Promise<{ success: boolean }> {
+    return authRequest<{ success: boolean }>(`${BASE_URL}/session/${sessionId}`, {
+      method: "DELETE",
+    });
   },
 
   /**
    * 答案之书：GET /api/agent/answer-book?question=xxx
-   * 后端已就绪，直接调真实接口；失败返回 null，由前端兜底 mock
+   * 公开接口；失败返回 null，由前端兜底 mock
    */
   async fetchAnswerBook(question: string): Promise<string | null> {
     try {
@@ -92,7 +80,7 @@ export const agentApi = {
 
   /**
    * 塔罗牌：POST /api/agent/tarot（单张）
-   * 未配置有效 key 时后端返回 data: null，由前端兜底 mock
+   * 公开接口；未配置有效 key 时后端返回 data: null，由前端兜底 mock
    */
   async fetchTarot(topicId = 5): Promise<TarotCardRes[] | null> {
     try {
@@ -109,5 +97,18 @@ export const agentApi = {
     }
   },
 };
+
+/** 首页卡片列表由 HistoryDetail[] 映射得到 */
+export function toCardItem(d: HistoryDetail): SessionCardItem {
+  return {
+    sessionId: d.session.sessionId,
+    taskContent: d.task.taskContent,
+    agentSuggestIndex: d.session.agentSuggestIndex,
+    conclusion: d.session.conclusion,
+    persuadeMode: d.session.persuadeMode,
+    createdAt: d.createdAt,
+    hasFeedback: d.record !== null,
+  };
+}
 
 export default agentApi;

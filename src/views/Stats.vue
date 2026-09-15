@@ -15,7 +15,8 @@ const router = useRouter();
 const store = useAgentStore();
 
 onMounted(() => {
-  store.seedDemoData();
+  // 拉取当前用户全部会话用于统计，后端连不通时 store 内部 mock 兜底
+  store.loadSessions();
 });
 
 const stats = computed(() => store.stats);

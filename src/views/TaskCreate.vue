@@ -3,7 +3,6 @@
 import { reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAgentStore } from "@/store/agentStore";
-import { agentApi } from "@/api/agentApi";
 import type { TaskCreateReq, TaskCategory } from "@/types";
 import PageWrapper from "@/components/layout/PageWrapper.vue";
 import LinearButton from "@/components/sketch/LinearButton.vue";
@@ -63,25 +62,16 @@ async function submit() {
     return;
   }
   submitting.value = true;
-  // 会话主体暂走 mock；神秘加成（答案之书/塔罗牌）调真实后端接口
-  const session = store.createMockSession({ ...form });
-
-  if (form.enableAnswerBook) {
-    const answer = await agentApi.fetchAnswerBook(form.taskContent);
-    // 接口失败时保留 mock 神谕
-    if (answer) session.answerBook = answer;
+  try {
+    // 创建会话：后端计算行动指数/劝说模式，并生成答案之书与塔罗牌
+    // 后端连不通时 store 内部用本地 mock 兜底
+    const session = await store.createSession({ ...form });
+    router.push(`/session/${session.sessionId}`);
+  } catch (e) {
+    errorMsg.value = (e as Error).message;
+  } finally {
+    submitting.value = false;
   }
-  if (form.enableTarot) {
-    const cards = await agentApi.fetchTarot();
-    // 接口失败（如未配置有效塔罗 key）时保留 mock 牌面
-    if (cards?.length) {
-      session.tarotCards = cards.map((c) => `${c.cardName} · ${c.orientation}`);
-      session.taroCard = session.tarotCards[0];
-    }
-  }
-
-  submitting.value = false;
-  router.push(`/session/${session.sessionId}`);
 }
 
 function reset() {

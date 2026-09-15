@@ -1,6 +1,8 @@
 // Pinia 用户仓库：对接后端注册/登录，管理 JWT token 与当前用户
 import { defineStore } from "pinia";
 import { userApi, type AuthRes } from "@/api/userApi";
+import { useAgentStore } from "@/store/agentStore";
+import { useTodoStore } from "@/store/todoStore";
 
 export interface UserInfo {
   id?: number;
@@ -65,11 +67,12 @@ export const useUserStore = defineStore("user", {
       localStorage.setItem(CURRENT_KEY, JSON.stringify({ token: res.token, user }));
     },
 
-    /** 注册（成功后端直接签发 token，等同于自动登录） */
+    /** 注册（需邮箱验证码，成功后端直接签发 token，等同于自动登录） */
     async register(payload: {
       username: string;
       email: string;
       password: string;
+      code: string;
     }): Promise<{ ok: boolean; msg: string }> {
       try {
         const res = await userApi.register(payload);
@@ -97,11 +100,14 @@ export const useUserStore = defineStore("user", {
       }
     },
 
-    /** 退出登录 */
+    /** 退出登录：清登录态 + 清空业务数据内存（数据均在后端） */
     logout() {
       this.currentUser = null;
       this.token = null;
       localStorage.removeItem(CURRENT_KEY);
+      // store 在 action 运行时才实例化，静态 import 不会产生循环依赖问题
+      useAgentStore().resetSessions();
+      useTodoStore().resetTodos();
     },
 
     /**

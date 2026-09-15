@@ -4,12 +4,14 @@ import { reactive, ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useUserStore } from "@/store/userStore";
 import { useAgentStore } from "@/store/agentStore";
+import { userApi } from "@/api/userApi";
 import PageWrapper from "@/components/layout/PageWrapper.vue";
 import LinearButton from "@/components/sketch/LinearButton.vue";
 import SketchBorder from "@/components/sketch/SketchBorder.vue";
 import DualTextBlock from "@/components/sketch/DualTextBlock.vue";
 import SketchCheckbox from "@/components/sketch/SketchCheckbox.vue";
 import DecorDotCluster from "@/components/sketch/DecorDotCluster.vue";
+import EmailCodeInput from "@/components/sketch/EmailCodeInput.vue";
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -30,7 +32,8 @@ onMounted(() => {
     router.push("/login");
     return;
   }
-  agentStore.seedDemoData();
+  // 拉取当前用户会话用于统计，后端连不通时 store 内部 mock 兜底
+  agentStore.loadSessions();
   syncForm();
 });
 
@@ -38,7 +41,7 @@ function syncForm() {
   if (!userStore.currentUser) return;
   form.username = userStore.currentUser.username;
   form.email = userStore.currentUser.email;
-  form.bio = userStore.currentUser.bio;
+  form.bio = userStore.currentUser.bio ?? "";
 }
 
 function startEdit() {
@@ -77,7 +80,48 @@ function save() {
 
 function logout() {
   userStore.logout();
+  agentStore.resetSessions();
   router.push("/login");
+}
+
+// —— 注销账户：绑定邮箱验证码确认 ——
+const deleteForm = reactive({ code: "", agreed: false });
+const deleteMsg = ref("");
+const deleting = ref(false);
+
+// 发送注销验证码：后端从登录态取用户，发往绑定邮箱（type=delete）；失败抛错
+async function sendDeleteCode() {
+  deleteMsg.value = "";
+  try {
+    await userApi.sendDeleteCode();
+  } catch (e) {
+    deleteMsg.value = (e as Error).message;
+    throw e;
+  }
+}
+
+// 执行注销：校验通过后清登录态并跳登录页
+async function doDelete() {
+  deleteMsg.value = "";
+  if (!/^\d{6}$/.test(deleteForm.code)) {
+    deleteMsg.value = "请输入 6 位邮箱验证码";
+    return;
+  }
+  if (!deleteForm.agreed) {
+    deleteMsg.value = "请先勾选确认已知晓注销后果";
+    return;
+  }
+  deleting.value = true;
+  try {
+    await userApi.deleteAccount(deleteForm.code);
+    userStore.logout();
+    agentStore.resetSessions();
+    router.push({ name: "login", query: { accountDeleted: "1" } });
+  } catch (e) {
+    deleteMsg.value = (e as Error).message;
+  } finally {
+    deleting.value = false;
+  }
 }
 
 function formatDate(iso: string): string {
@@ -213,6 +257,43 @@ function formatDate(iso: string): string {
               <p class="text-3xl font-light font-en">{{ stats.acceptRate }}<span class="text-lg">%</span></p>
               <p class="mt-1 text-[10px] text-sketch-lineSub font-en tracking-widest">ACCEPT</p>
             </div>
+          </div>
+        </SketchBorder>
+
+        <!-- 注销账户（危险操作，需绑定邮箱验证码） -->
+        <SketchBorder padding="2rem">
+          <DualTextBlock cn="注销账户" en="DELETE ACCOUNT" size="md" weight="normal" />
+          <p class="mt-4 text-sm font-light leading-relaxed text-sketch-lineSub">
+            注销后，你的账号以及全部纠结任务、Agent 会话、行为反馈与统计数据将被
+            <span class="text-sketch-line">永久删除且无法恢复</span>。请谨慎操作。
+          </p>
+
+          <EmailCodeInput
+            v-model="deleteForm.code"
+            class="mt-5"
+            :on-send="sendDeleteCode"
+            placeholder="6 位数字，发送至绑定邮箱"
+          />
+
+          <label class="mt-4 flex items-center gap-3 cursor-pointer select-none">
+            <SketchCheckbox v-model="deleteForm.agreed" :size="20" />
+            <span class="text-sm font-light text-sketch-lineSub">
+              我已知晓注销后果，确认永久删除账户
+            </span>
+          </label>
+
+          <p v-if="deleteMsg" class="mt-4 text-xs text-sketch-line border border-sketch-line/40 px-3 py-2">
+            {{ deleteMsg }}
+          </p>
+
+          <div class="mt-5">
+            <LinearButton
+              size="md"
+              :disabled="deleting || !deleteForm.agreed || deleteForm.code.length !== 6"
+              @click="doDelete"
+            >
+              <span>{{ deleting ? "注销中…" : "确认注销账户" }}</span>
+            </LinearButton>
           </div>
         </SketchBorder>
       </div>

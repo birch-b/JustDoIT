@@ -3,10 +3,12 @@
 import { ref } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { useUserStore } from "@/store/userStore";
+import { useAgentStore } from "@/store/agentStore";
 import { onMounted } from "vue";
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
+const agentStore = useAgentStore();
 const expanded = ref(true);
 onMounted(() => {
   if (!userStore.currentUser) userStore.init();
@@ -23,12 +25,9 @@ const authLinks = [
 function toggle() {
   expanded.value = !expanded.value;
 }
-function goProfile() {
-  router.push("/profile");
-  expanded.value = false;
-}
 function logout() {
   userStore.logout();
+  agentStore.resetSessions();
   router.push("/login");
   expanded.value = false;
 }

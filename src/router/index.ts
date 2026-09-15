@@ -13,27 +13,25 @@ const routes: RouteRecordRaw[] = [
     path: "/task-create",
     name: "task-create",
     component: () => import("@/views/TaskCreate.vue"),
-    meta: { title: "新的纠结 | New Decision" },
+    meta: { title: "新的纠结 | New Decision", requiresAuth: true },
   },
   {
     path: "/session/:id",
     name: "session",
     component: () => import("@/views/SessionResult.vue"),
-    meta: { title: "Agent 结果 | Agent Result" },
+    meta: { title: "Agent 结果 | Agent Result", requiresAuth: true },
     props: true,
   },
   {
+    // 历史详情已合并进会话页，旧链接永久重定向
     path: "/history/:id",
-    name: "history",
-    component: () => import("@/views/HistoryDetail.vue"),
-    meta: { title: "历史详情 | History" },
-    props: true,
+    redirect: (to) => ({ name: "session", params: { id: to.params.id } }),
   },
   {
     path: "/stats",
     name: "stats",
     component: () => import("@/views/Stats.vue"),
-    meta: { title: "个人统计 | Stats" },
+    meta: { title: "个人统计 | Stats", requiresAuth: true },
   },
   {
     path: "/login",
@@ -46,6 +44,12 @@ const routes: RouteRecordRaw[] = [
     name: "register",
     component: () => import("@/views/Register.vue"),
     meta: { title: "注册 | Register" },
+  },
+  {
+    path: "/forgot-password",
+    name: "forgot-password",
+    component: () => import("@/views/ForgotPassword.vue"),
+    meta: { title: "找回密码 | Reset Password" },
   },
   {
     path: "/profile",
@@ -63,16 +67,17 @@ const router = createRouter({
   },
 });
 
-// 登录守卫
+// 登录守卫：除首页 / 登录 / 注册 / 忘记密码外，所有页面都需要登录
 router.beforeEach((to) => {
   const userStore = useUserStore();
   if (!userStore.currentUser) userStore.init();
   if (to.meta.requiresAuth && !userStore.isLoggedIn) {
-    return { name: "login" };
+    // 未登录：带 redirect 回跳地址跳登录页，登录后原路返回
+    return { name: "login", query: { redirect: to.fullPath } };
   }
-  // 已登录用户访问登录/注册页，跳转到个人中心
+  // 已登录用户访问登录/注册/找回密码页，跳转到个人中心
   if (
-    (to.name === "login" || to.name === "register") &&
+    (to.name === "login" || to.name === "register" || to.name === "forgot-password") &&
     userStore.isLoggedIn
   ) {
     return { name: "profile" };

@@ -4,8 +4,8 @@ import { computed } from "vue";
 import NavBar from "@/components/layout/NavBar.vue";
 
 const route = useRoute();
-// 登录/注册页隐藏导航栏
-const showNavBar = computed(() => !["login", "register"].includes(route.name as string));
+// 登录/注册/找回密码页隐藏导航栏
+const showNavBar = computed(() => !["login", "register", "forgot-password"].includes(route.name as string));
 </script>
 
 <template>

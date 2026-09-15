@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 登录页 /login
-import { reactive, ref } from "vue";
-import { useRouter, RouterLink } from "vue-router";
+import { reactive, ref, computed } from "vue";
+import { useRouter, useRoute, RouterLink } from "vue-router";
 import { useUserStore } from "@/store/userStore";
 import PageWrapper from "@/components/layout/PageWrapper.vue";
 import LinearButton from "@/components/sketch/LinearButton.vue";
@@ -11,7 +11,22 @@ import SketchCheckbox from "@/components/sketch/SketchCheckbox.vue";
 import DecorDotCluster from "@/components/sketch/DecorDotCluster.vue";
 
 const router = useRouter();
+const route = useRoute();
 const userStore = useUserStore();
+
+// 被路由守卫拦截时带的回跳地址，登录成功后原路返回
+const redirect = computed(() => {
+  const r = route.query.redirect;
+  return typeof r === "string" && r.startsWith("/") ? r : "/";
+});
+// 守卫带来的提示：需要先登录才能继续
+const guardHint = computed(() =>
+  typeof route.query.redirect === "string" ? "请先登录后再继续操作" : ""
+);
+// 账户注销成功后跳转回登录页的提示
+const deletedHint = computed(() =>
+  route.query.accountDeleted === "1" ? "账户已注销，期待下次相遇" : ""
+);
 
 const form = reactive({
   account: "",
@@ -40,7 +55,7 @@ async function submit() {
     errorMsg.value = res.msg;
     return;
   }
-  router.push("/");
+  router.push(redirect.value);
 }
 </script>
 
@@ -83,7 +98,13 @@ async function submit() {
             />
           </div>
 
-          <!-- 错误提示 -->
+          <!-- 守卫提示 / 注销提示 / 错误提示 -->
+          <p v-if="guardHint" class="text-xs text-sketch-accent border border-sketch-accent/40 px-3 py-2">
+            {{ guardHint }}
+          </p>
+          <p v-if="deletedHint" class="text-xs text-sketch-accent border border-sketch-accent/40 px-3 py-2">
+            {{ deletedHint }}
+          </p>
           <p v-if="errorMsg" class="text-xs text-sketch-line border border-sketch-line/40 px-3 py-2">
             {{ errorMsg }}
           </p>
@@ -97,6 +118,10 @@ async function submit() {
               还没有账号？
               <RouterLink to="/register" class="underline hover:text-sketch-line">
                 去注册
+              </RouterLink>
+              <span class="mx-2">·</span>
+              <RouterLink to="/forgot-password" class="underline hover:text-sketch-line">
+                忘记密码？
               </RouterLink>
             </p>
           </div>

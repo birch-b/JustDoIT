@@ -1,8 +1,7 @@
 <script setup lang="ts">
-// 注册页 /register
-import { reactive, ref, computed } from "vue";
-import { useRouter, useRoute, RouterLink } from "vue-router";
-import { useUserStore } from "@/store/userStore";
+// 忘记密码页 /forgot-password：邮箱验证码重置密码
+import { reactive, ref } from "vue";
+import { useRouter, RouterLink } from "vue-router";
 import { userApi } from "@/api/userApi";
 import PageWrapper from "@/components/layout/PageWrapper.vue";
 import LinearButton from "@/components/sketch/LinearButton.vue";
@@ -13,26 +12,18 @@ import DecorDotCluster from "@/components/sketch/DecorDotCluster.vue";
 import EmailCodeInput from "@/components/sketch/EmailCodeInput.vue";
 
 const router = useRouter();
-const route = useRoute();
-const userStore = useUserStore();
-
-// 注册成功后的回跳地址（无 redirect 时进首页）
-const redirect = computed(() => {
-  const r = route.query.redirect;
-  return typeof r === "string" && r.startsWith("/") ? r : "/";
-});
 
 const form = reactive({
-  username: "",
   email: "",
   code: "",
-  password: "",
+  newPassword: "",
   confirm: "",
 });
 const errorMsg = ref("");
+const successMsg = ref("");
 const loading = ref(false);
 
-// 发送注册验证码（type=register）：失败时抛错，由 EmailCodeInput 控制不启动倒计时
+// 发送找回密码验证码（type=reset，后端据此区分注册/改密场景）：失败抛错，不启动倒计时
 async function sendCode() {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
     errorMsg.value = "请先输入有效的邮箱地址";
@@ -40,7 +31,7 @@ async function sendCode() {
   }
   errorMsg.value = "";
   try {
-    await userApi.sendCode({ email: form.email.trim(), type: "register" });
+    await userApi.sendCode({ email: form.email.trim(), type: "reset" });
   } catch (e) {
     errorMsg.value = (e as Error).message;
     throw e;
@@ -49,14 +40,7 @@ async function sendCode() {
 
 async function submit() {
   errorMsg.value = "";
-  if (!form.username.trim()) {
-    errorMsg.value = "请填写用户名";
-    return;
-  }
-  if (form.username.trim().length < 3) {
-    errorMsg.value = "用户名至少 3 位";
-    return;
-  }
+  successMsg.value = "";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
     errorMsg.value = "请输入有效的邮箱地址";
     return;
@@ -65,28 +49,28 @@ async function submit() {
     errorMsg.value = "请输入 6 位邮箱验证码";
     return;
   }
-  if (form.password.length < 6) {
-    errorMsg.value = "密码至少 6 位";
+  if (form.newPassword.length < 6) {
+    errorMsg.value = "新密码至少 6 位";
     return;
   }
-  if (form.password !== form.confirm) {
+  if (form.newPassword !== form.confirm) {
     errorMsg.value = "两次密码不一致";
     return;
   }
   loading.value = true;
-  // 注册成功后端直接签发 token，等同于自动登录
-  const res = await userStore.register({
-    username: form.username.trim(),
-    email: form.email.trim(),
-    password: form.password,
-    code: form.code,
-  });
-  loading.value = false;
-  if (!res.ok) {
-    errorMsg.value = res.msg;
-    return;
+  try {
+    await userApi.resetPassword({
+      email: form.email.trim(),
+      code: form.code,
+      newPassword: form.newPassword,
+    });
+    successMsg.value = "密码重置成功，即将跳转登录页…";
+    setTimeout(() => router.push("/login"), 1500);
+  } catch (e) {
+    errorMsg.value = (e as Error).message;
+  } finally {
+    loading.value = false;
   }
-  router.push(redirect.value);
 }
 </script>
 
@@ -104,23 +88,12 @@ async function submit() {
         <form class="space-y-5" @submit.prevent="submit">
           <div class="flex items-center gap-2">
             <SketchCheckbox :size="18" decorative />
-            <DualTextBlock cn="创建账号" en="CREATE ACCOUNT" size="md" weight="normal" />
-          </div>
-
-          <!-- 用户名 -->
-          <div>
-            <DualTextBlock cn="用户名" en="USERNAME" size="sm" weight="normal" />
-            <input
-              v-model="form.username"
-              type="text"
-              class="sketch-input mt-2 w-full"
-              placeholder="给自己起个名字"
-            />
+            <DualTextBlock cn="找回密码" en="RESET PASSWORD" size="md" weight="normal" />
           </div>
 
           <!-- 邮箱 -->
           <div>
-            <DualTextBlock cn="邮箱" en="EMAIL" size="sm" weight="normal" />
+            <DualTextBlock cn="注册邮箱" en="EMAIL" size="sm" weight="normal" />
             <input
               v-model="form.email"
               type="email"
@@ -136,20 +109,20 @@ async function submit() {
             placeholder="6 位数字"
           />
 
-          <!-- 密码 -->
+          <!-- 新密码 -->
           <div>
-            <DualTextBlock cn="密码" en="PASSWORD" size="sm" weight="normal" />
+            <DualTextBlock cn="新密码" en="NEW PASSWORD" size="sm" weight="normal" />
             <input
-              v-model="form.password"
+              v-model="form.newPassword"
               type="password"
               class="sketch-input mt-2 w-full"
               placeholder="至少 6 位"
             />
           </div>
 
-          <!-- 确认密码 -->
+          <!-- 确认新密码 -->
           <div>
-            <DualTextBlock cn="确认密码" en="CONFIRM PASSWORD" size="sm" weight="normal" />
+            <DualTextBlock cn="确认新密码" en="CONFIRM PASSWORD" size="sm" weight="normal" />
             <input
               v-model="form.confirm"
               type="password"
@@ -158,18 +131,21 @@ async function submit() {
             />
           </div>
 
-          <!-- 错误提示 -->
+          <!-- 提示信息 -->
           <p v-if="errorMsg" class="text-xs text-sketch-line border border-sketch-line/40 px-3 py-2">
             {{ errorMsg }}
+          </p>
+          <p v-if="successMsg" class="text-xs text-sketch-accent border border-sketch-accent/40 px-3 py-2">
+            {{ successMsg }}
           </p>
 
           <!-- 操作 -->
           <div class="flex flex-col gap-3 pt-2">
             <LinearButton type="submit" size="lg" block :disabled="loading">
-              <span>{{ loading ? "注册中…" : "注 册" }}</span>
+              <span>{{ loading ? "重置中…" : "重置密码" }}</span>
             </LinearButton>
             <p class="text-center text-xs text-sketch-lineSub font-light">
-              已有账号？
+              想起密码了？
               <RouterLink to="/login" class="underline hover:text-sketch-line">
                 去登录
               </RouterLink>
