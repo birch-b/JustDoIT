@@ -1,196 +1,263 @@
-# Vue3+TS｜线性极简艺术风前端完整方案（对标上面React版本）
+# Vue3+TS｜线性极简艺术风前端完整方案
 
-> 完全对齐参考风格：**细线轮廓SVG、空心方框装饰、手绘时钟图形、中英对照文案、浅青碧底色、无大面积填充色块；全部SVG内联，不引入图片资源** 技术栈：Vue3 + TypeScript + Vite + TailwindCSS + Framer‑Motion‑Vue（线条动画）；项目为「今日行动师Agent」决策项目前端。
+> 技术栈：Vue 3.5 + TypeScript + Vite 5 + Pinia 2 + Vue Router 4 + TailwindCSS 3
+> 项目：「JUST DO IT · 今日行动师」决策辅助应用前端（已与 NestJS 后端真实联调）
+> 更新时间：2026-09-18
 
-## 一、页面总数 & 页面清单（一共5个页面，和React版一一对应）
+## 一、项目定位与总体架构
 
-1. **首页 / 仪表盘 Dashboard**：总入口，历史会话卡片列表，新建决策按钮
-2. **决策填写页 /task‑create**：任务表单录入（意愿、精力、任务参数），大量空心方框SVG装饰
-3. **Agent结果页 /session/:id**【核心页面】渲染Agent输出，手绘时钟组件、中英对照文案、劝说模式、用户反馈按钮 ✅⭕❌
-4. **历史记录详情页 /history/:id** 查看历史某次决策会话，展示当时结果+用户真实行为记录
-5. **个人统计页 /stats**：行动数据可视化，纯SVG手绘线性图表
+帮助纠结的用户做「做不做」的决定：填写任务 → Agent 给出行动指数/劝说/最小行动 → 用户接受/拒绝 → 接受者加入计划表追踪完成情况 → 统计页聚合回顾。
 
-> 路由：Vue‑Router4；全局一套主题配色，PC横向布局，移动端自动纵向堆叠。
+- **仓库结构**：单 Git 仓库，前端在根目录、后端在 `action-agent-nest/` 子目录，共用 `.git`
+- **包管理器**：前端 **pnpm 10.19.0**（根目录只留 `pnpm-lock.yaml`，根 `.gitignore` 已用 `/` 锚定忽略 `package-lock.json` 与 `yarn.lock`）；后端子工程仍用 npm
+- **开发端口**：前端 Vite 5174，`/api` 代理到后端 3000
+- **鉴权**：JWT Bearer，token 存 localStorage，`src/api/http.ts` Axios 拦截器统一注入 + 401 回登录
+- **动画**：纯 CSS `transition` + `cubic-bezier`，未引入 framer-motion-vue（风格克制）
 
-## 二、全局设计规范（颜色调浅，对标参考）
+---
 
-### 1. 颜色规范 tailwind.config.ts
+## 二、页面清单（8 页，对应 `src/views/`）
 
-| 用途            | 色值                       | 说明                               |
-| ------------- | ------------------------ | -------------------------------- |
-| 页面背景          | `#48bcb0`                | 浅青碧色，比原版绿色更浅                     |
-| 线条、SVG描边、空心方框 | `#ffffff`                | 白色细线，`stroke‑width:1.2px`，只描边不填充 |
-| 次要辅助文字        | `rgba(255,255,255,0.7)`  | 小号英文说明文本                         |
-| hover交互蒙层     | `rgba(255,255,255,0.15)` | 悬浮微弱白色蒙层                         |
-| 按钮边框          | `#ffffff`                | 只有描边，无背景填充，线性按钮                  |
+| 路由 | 组件 | 权限 | 说明 |
+|---|---|---|---|
+| `/` | Dashboard.vue | 公开 | 首页：计划表 + 历史会话卡片 |
+| `/task-create` | TaskCreate.vue | 登录 | 任务表单 + 神秘加成开关 |
+| `/session/:id` | SessionResult.vue | 登录 | 会话统一页（Agent 结果 + 历史 + 反馈 + 删除） |
+| `/history/:id` | — | — | **已合并进 `/session/:id`**，旧链接 301 重定向 |
+| `/stats` | Stats.vue | 登录 | 原生 SVG 统计图表 |
+| `/login` | Login.vue | 公开 | 用户名或邮箱登录 |
+| `/register` | Register.vue | 公开 | 注册（需邮箱验证码） |
+| `/forgot-password` | ForgotPassword.vue | 公开 | 找回密码（邮箱验证码 + 重置） |
+| `/profile` | Profile.vue | 登录 | 个人中心、注销账户（验证码） |
 
-> tailwind 配置片段
+**路由守卫**（`router/index.ts`）：
+- `requiresAuth` 未登录 → 跳 `/login?redirect=<原路径>`，登录后原路返回
+- 已登录访问 login/register/forgot-password → 跳 `/profile`
+- `/history/:id` → `redirect` 到 `/session/:id`
+- `scrollBehavior` 每次回到顶部
+- `afterEach` 设置文档标题
 
-```
-// tailwind.config.ts
-import type { Config } from "tailwindcss";
-export default {
-  theme: {
-    extend: {
-      colors: {
-        sketch: {
-          bg: "#48bcb0",
-          line: "#ffffff",
-          lineSub: "rgba(255,255,255,0.7)",
-          hover: "rgba(255,255,255,0.15)"
-        }
-      }
-    }
-  }
-} satisfies Config;
-```
+---
 
-### 2. 字体规范
+## 三、全局设计规范
 
-- 中文：`Noto Sans SC`
-- 英文：`Inter`
-- 大标题：`font‑light`（字重300）
-- 正文：`font‑light / font‑normal`（300‑400）
-- 排版规则：**中文主文案在上，小号英文说明放在下方，中英对照布局**
+### 1. 配色（`tailwind.config.ts`）
 
-### 3. 全局可复用公共组件（全部SFC单文件，SVG写在template内）
+从早期「青碧底 + 白线」调整为更柔和的「**奶米底 + 深棕线 + 薄荷灰绿点缀**」：
 
-| 组件                   | 路径                                       | 作用                                         |
-| -------------------- | ---------------------------------------- | ------------------------------------------ |
-| `SketchClock.vue`    | `@/components/sketch/SketchClock.vue`    | 手绘缠绕时钟；入参`score(0‑100)`控制指针旋转角度，size控制画布大小 |
-| `SketchCheckbox.vue` | `@/components/sketch/SketchCheckbox.vue` | 空心方框装饰组件，仅描边，可做装饰也可绑定v‑model               |
-| `SketchBorder.vue`   | `@/components/sketch/SketchBorder.vue`   | 手绘不规则缠绕装饰边框SVG                             |
-| `LinearButton.vue`   | `@/components/sketch/LinearButton.vue`   | 线性边框按钮，无背景填充，白色描边hover浮层                   |
-| `DualTextBlock.vue`  | `@/components/sketch/DualTextBlock.vue`  | 中英对照文本块：主中文 + 小号英文说明                       |
-| `PageWrapper.vue`    | `@/components/layout/PageWrapper.vue`    | 全局页面外壳，统一背景色、内边距                           |
-| `NavBar.vue`         | `@/components/layout/NavBar.vue`         | 顶部导航栏                                      |
+| 用途 | Token | 色值 | 说明 |
+|---|---|---|---|
+| 页面背景 | `sketch.bg` | `#FFF2E1` | 奶米色 (255,242,225) |
+| 主描边/文字 | `sketch.line` | `#634442` | 深棕 (99,68,66) |
+| 次要文字 | `sketch.lineSub` | `rgba(99,68,66,0.65)` | 65% 透明深棕 |
+| hover 浮层 | `sketch.hover` | `rgba(99,68,66,0.12)` | 12% 透明 |
+| 点缀色 | `sketch.accent` | `#A9C8C2` | 薄荷灰绿 (169,200,194) |
 
-## 三、每个页面详细设计
+边框统一 `borderWidth.sketch = 1.5px`，与 SVG `stroke-width: 1.8px` 风格一致。
 
-### 📄页面1：首页 Dashboard `/`
+### 2. 字体与字重
 
-**布局**
+- 中文：`Noto Sans SC`；英文：`Inter`
+- 字重整体偏粗：`light=500 / normal=600 / medium=700 / semibold=700`
+- 中英对照排版：中文主文案在上，小号英文说明（`text-[12px]` + `tracking-widest`）在下
 
-- 顶部：标题「今日行动师」，小字英文 *Today Action Agent*
-- 中间：历史会话卡片列表，卡片为白色细描边；展示任务名称、行动指数、日期
-- 悬浮主按钮：`<LinearButton>`【新建一次决策】跳转到 `/task‑create`
-- 装饰：角落放缩小版 `<SketchClock>` 作为纯视觉装饰
-- 空状态：无历史记录，展示手绘线条空状态插画
+### 3. 全局可复用组件（`src/components/`）
 
-### 📄页面2：任务填写页 `/task‑create`
+**手绘线性组件**（`components/sketch/`，共 8 个）：
 
-> 对标参考图大量空心方框排布 **表单字段** 任务内容、主观意愿滑块(1‑10)、精力滑块(1‑10)、重要度滑块(1‑10)、预计耗时、截止日期、地点、启用塔罗开关。
+| 组件 | 作用 | 关键 props |
+|---|---|---|
+| `SketchClock.vue` | 手绘缠绕时钟，指针角度映射分数 | `score`(0-100)、`size`、`animated` |
+| `SketchCheckbox.vue` | 空心方框勾选框，可装饰可绑定 | `modelValue`、`decorative`、`size`、`rotate` |
+| `SketchBorder.vue` | 手绘不规则缠绕边框卡片 | `padding`（SVG 边框已向边缘收缩避免文字重叠） |
+| `LinearButton.vue` | 贝塞尔波浪边框按钮，hover 薄荷绿 | `size`、`disabled` |
+| `DualTextBlock.vue` | 中英对照文本块 | `cn`、`en`、`size`、`weight`、`highlight` |
+| `DecorDotCluster.vue` | 随机波点装饰簇（引用 SketchDot） | `count`、`spread`、`safe-inset`、`hollow-ratio` |
+| `SketchDot.vue` | 单个波点 | — |
+| `SketchChip.vue` | 线性标签 chip | — |
+| `EmailCodeInput.vue` | 邮箱验证码输入（注册/找回/注销共用） | — |
 
-**视觉布局**
+**布局外壳**（`components/layout/`，2 个）：
 
-- 背景 `bg‑sketch‑bg`
-- 页面散落多个 `<SketchCheckbox>`，部分仅做装饰，部分绑定表单v‑model
-- 表单控件自定义：滑块轨道白色细线；输入框仅下边框，无填充背景
-- 底部提交按钮；提交成功跳转 `/session/${sessionId}`
+| 组件 | 作用 |
+|---|---|
+| `PageWrapper.vue` | 全局页面外壳，统一背景/内边距，`full` 模式供登录注册等无 NavBar 页 |
+| `NavBar.vue` | 顶部导航栏，可收起/展开（汉堡→X 动画），登录后显示个人中心 + 退出 |
 
-### 📄页面3：Agent结果页 `/session/:id`【核心页面】
+---
 
-PC布局：左侧大时钟SVG，右侧文案区域；移动端：时钟放顶部，文案垂直向下排布。
+## 四、页面详细设计
 
-1. **左侧/顶部 `<SketchClock :score="agentSuggestIndex" :size="360"/>`**
-   
-   - 缠绕手绘环线；指针角度由后端返回行动指数控制；圆环四周散落`<SketchCheckbox>`装饰方框
+### 页面 1：首页 Dashboard `/`
 
-2. **文案区域，使用 `<DualTextBlock>` 批量渲染**
-   
-   - 中文主结论：`去做 / 暂缓，今天不建议强行做` + 小号英文翻译
-   - 劝说模式标签、劝说话术
-   - 最小行动提示
-   - 历史真实行为摘要展示块（中英对照）
+- 顶部：标题区 + 时钟装饰
+- **我的计划表 TO DO LIST**：勾选完成（对勾 + 删除线 + 变淡），未完成优先展示，已完成折叠区可展开/取消/清除
+  - 标题右侧实时显示 `X PENDING · Y DONE`
+  - 勾选完成时回写 `ActionRecord.isExecute`，打通「接受→执行」链路
+  - 首次登录时 localStorage 旧待办自动迁移到后端
+- 下方：历史会话卡片列表（任务名 + 行动指数 + 日期 + 是否已反馈）
+- 空状态：手绘线条空状态插画
+- 主按钮：新建决策 → `/task-create`
 
-3. **底部反馈操作区** 三个`<LinearButton>`
-   
-   > ✅我接受并完成｜⭕接受但未完成｜❌拒绝本次建议
-   >  用户点击后弹出简易表单填写实际耗时、备注；调用接口提交`action_record`，提交后可跳转历史页面。
+### 页面 2：任务填写 `/task-create`
 
-> SketchClock 入参ts声明
+- **纠结分类按钮组**（work/study/life/shopping/health/social/other）
+- **三滑块**：意愿 / 精力 / 重要度（1-10）
+- 可选：预计耗时、截止日期、地点
+- **神秘加成两开关**：答案之书（默认勾选）、塔罗牌单张（默认不勾），整行 label 可点
+- 提交 → 调真实后端创建会话 + 答案之书/塔罗接口 → 跳 `/session/:id`
+- 视觉：散落多个 `SketchCheckbox` 装饰，滑块轨道为白色细线，输入框仅下边框
 
-```
-interface Props {
-  score: number; // agentSuggestIndex 0‑100
-  size: number; // svg画布像素大小
-}
-```
+### 页面 3：会话统一页 `/session/:id`【核心页面】
 
-### 📄页面4：历史详情页 `/history/:id`
+合并了原方案的「Agent 结果页 + 历史详情页」。
 
-- 复用 `<SketchClock :score="xxx" :size="280"/>` 渲染该次会话行动指数
-- 完整复现当时全部会话文案、劝说模式、历史摘要
-- 明确展示**用户当时真实反馈记录**：是否执行、实际耗时、备注
-- 保持全局中英对照、线性手绘风格统一
+- **顶部**：小标题 + SESSION #ID · 时间 + 删除记录按钮（悬浮下划线与 NavBar 链接一致）
+- **左侧**：大时钟 `<SketchClock :score="agentSuggestIndex" :size="320">` + 四周装饰方框 + ACTION INDEX 标签
+- **右侧**：
+  - 结论卡（`SketchBorder`）：中英对照结论（`agentSuggestIndex >= 50 ? GO FOR IT NOW : HOLD OFF TODAY`）+ 劝说模式 + 劝说文案
+  - 答案之书：`「{{ answerBook }}」` 引用块（可选）
+  - 塔罗牌：单张牌名 + 正逆位（可选）
+  - 当时任务输入：任务内容 / 意愿·精力·重要度 / 预计耗时 / 分类·截止
+  - 最小行动提示
+  - 历史真实行为摘要（动态生成，同类任务 ≥3 条按同类统计，否则按整体执行率）
+  - **你的决定与反馈**：
+    - 未反馈：两个按钮 ✓ 我接受 / ✕ 我拒绝（接受 → 自动加入计划表）
+    - 已反馈：回显接受/拒绝 + 执行状态 + 实际耗时 + 备注 + 计划状态
+    - 接受后若待办被删，提供「重新加入计划表」按钮（重置执行状态）
+- **删除记录**：级联删除任务输入/Agent 建议/反馈/对应待办，二次确认
 
-### 📄页面5：个人统计页 `/stats`
+### 页面 4：统计 `/stats`
 
-- 全部使用原生SVG手绘线条图表，不引入第三方图表库，保持风格统一
-- 统计维度：历史任务执行率、各个劝说模式接受率分布、意愿分数‑完成率分布
-- 页面四周散落`<SketchCheckbox>`小装饰方框
+- 全部原生 SVG 手绘线条图表，不引入图表库
+- 维度：历史任务执行率、劝说模式接受率分布、意愿分数-完成率分布、分类分布
+- 页面四周散落 `SketchCheckbox` 小装饰方框
 
-## 四、完整项目目录结构
+### 页面 5：登录 `/login`
+
+- 用户名或邮箱 + 密码登录
+- 已登录访问自动跳 `/profile`
+- 登录后按 `redirect` query 回跳原页面
+
+### 页面 6：注册 `/register`
+
+- 用户名 + 邮箱 + 邮箱验证码（QQ 邮箱 SMTP）+ 密码
+- `EmailCodeInput` 组件统一处理验证码输入与 60 秒频控
+
+### 页面 7：找回密码 `/forgot-password`
+
+- 邮箱 + 验证码 + 新密码
+- 验证码与注册验证码隔离（5 分钟有效）
+
+### 页面 8：个人中心 `/profile`
+
+- 展示用户信息
+- 注销账户（需邮箱验证码二次确认）
+- 退出登录（清 userStore + agentStore + 跳 `/login`）
+
+---
+
+## 五、目录结构
 
 ```
 src
-├── assets                # 无图片资源，SVG全部写在组件template
 ├── components
-│   ├── sketch            # 手绘线性组件
+│   ├── sketch           # 手绘线性组件
 │   │   ├── SketchClock.vue
 │   │   ├── SketchCheckbox.vue
 │   │   ├── SketchBorder.vue
 │   │   ├── LinearButton.vue
-│   │   └── DualTextBlock.vue
-│   └── layout            # 布局外壳
+│   │   ├── DualTextBlock.vue
+│   │   ├── DecorDotCluster.vue
+│   │   ├── SketchDot.vue
+│   │   ├── SketchChip.vue
+│   │   └── EmailCodeInput.vue
+│   └── layout           # 布局外壳
 │       ├── PageWrapper.vue
 │       └── NavBar.vue
-├── views
-│   ├── Dashboard.vue       # / 首页仪表盘
-│   ├── TaskCreate.vue      # /task‑create 任务填写
-│   ├── SessionResult.vue   # /session/:id Agent结果页
-│   ├── HistoryDetail.vue   # /history/:id 历史详情
-│   └── Stats.vue           # /stats 个人统计页
-├── api
-│   └── agentApi.ts         # 请求封装 createSession / submitActionRecord
+├── views                # 8 个页面（见上表）
+│   ├── Dashboard.vue
+│   ├── TaskCreate.vue
+│   ├── SessionResult.vue
+│   ├── Stats.vue
+│   ├── Login.vue
+│   ├── Register.vue
+│   ├── ForgotPassword.vue
+│   └── Profile.vue
+├── api                  # 真实后端接口封装（mock 已全部移除）
+│   ├── http.ts          # Axios 实例 + 拦截器（注入 token、401 回登录）
+│   ├── userApi.ts       # 登录/注册/找回密码/验证码/注销
+│   ├── agentApi.ts      # 会话 CRUD + 反馈 + 历史 + 答案之书/塔罗
+│   └── todoApi.ts       # 计划表 CRUD
+├── store                # Pinia
+│   ├── userStore.ts     # 当前用户 + JWT + init/logout
+│   ├── agentStore.ts    # 会话列表/详情/创建/反馈/删除
+│   └── todoStore.ts     # 计划表 + loadTodos/add/update/toggle/clear
 ├── types
-│   └── index.ts            # TS接口定义
+│   └── index.ts         # 与后端契约对齐的 TS 类型
 ├── router
-│   └── index.ts            # vue‑router4配置
-├── store
-│   └── agentStore.ts       # Pinia，mock阶段存储会话、历史
+│   └── index.ts         # 路由 + 守卫 + 重定向 + 标题
 ├── App.vue
 └── main.ts
 ```
 
-## 五、TS类型定义 `src/types/index.ts`（与Nest后端接口契约完全对齐）
+---
 
-```
+## 六、TS 类型契约（`src/types/index.ts`）
+
+与 Nest 后端接口契约完全对齐，关键类型：
+
+```ts
+// 劝说模式
+export type PersuadeMode =
+  | "温柔劝说模式" | "激将模式" | "理性分析模式" | "塔罗模式";
+
+// 纠结分类
+export type TaskCategory =
+  | "work" | "study" | "life" | "shopping"
+  | "health" | "social" | "other";
+
 // 创建任务请求体
 export interface TaskCreateReq {
   taskContent: string;
+  category: TaskCategory;
   willScore: number;
   energyScore: number;
   importance: number;
-  expectCostMin: number;
-  deadline: string;
+  expectCostMin?: number | null;
+  deadline?: string | null;
   location: string;
-  enableTarot: boolean;
+  enableTarot: boolean;      // 塔罗牌（抽 1 张）
+  enableAnswerBook: boolean; // 答案之书
 }
 
-// Agent会话返回结果
+// 待办项（计划表）
+export interface TodoItem {
+  id: number;
+  taskContent: string;
+  category: TaskCategory;
+  deadline?: string | null;
+  done: boolean;
+  sessionId?: number | null;
+  completedAt?: string | null;
+  createdAt: string;
+}
+
+// Agent 会话返回结果
 export interface AgentSessionRes {
   sessionId: number;
   agentSuggestIndex: number;
   conclusion: string;
-  persuadeMode: "温柔劝说模式" | "激将模式" | "理性分析模式" | "塔罗模式";
+  persuadeMode: PersuadeMode;
   persuadeText: string;
   minAction: string;
   taroCard?: string;
-  historySummary: string;
+  tarotCards?: string[];   // 塔罗牌（单张，如 "愚人 · 正位"）
+  answerBook?: string;     // 答案之书
+  historySummary: string;  // 动态生成的历史摘要
 }
 
-// 用户提交行为反馈
+// 用户行为反馈
 export interface ActionRecordReq {
   sessionId: number;
   userAcceptSuggest: boolean;
@@ -198,84 +265,135 @@ export interface ActionRecordReq {
   actualCostMin: number;
   executeResult: string;
 }
-```
 
-## 六、核心组件伪代码 SketchClock.vue
-
-```
-<template>
-  <svg :width="size" :height="size" viewBox="0 0 400 400">
-    <!-- 外圈手绘缠绕环线，只描边不填充 -->
-    <path
-      d="M200,40 C280,60 340,120 360,200 C330,290 260,350 200,360 C110,340 50,270 40,200 C70,110 130,55 200,40"
-      fill="none"
-      stroke="#ffffff"
-      stroke‑width="1.2"
-    />
-    <!-- 基础刻度圆环 -->
-    <circle cx="200" cy="200" r="150" fill="none" stroke="#ffffff" stroke‑width="1"/>
-    <!-- 指针：分数映射为0‑360度旋转 -->
-    <line
-      x1="200" y1="200" x2="200" y2="70"
-      stroke="#ffffff" stroke‑width="2"
-      :transform="`rotate(${rotateDeg} 200 200)`"
-    />
-    <!-- 中心圆点 -->
-    <circle cx="200" cy="200" r="4" fill="#ffffff"/>
-  </svg>
-</template>
-
-<script setup lang="ts">
-import { computed } from "vue";
-
-interface Props {
-  score: number; // 0‑100
-  size: number;
+export interface ActionRecord extends ActionRecordReq {
+  recordId: number;
+  createdAt: string;
 }
-const props = defineProps<Props>();
-const rotateDeg = computed(() => (props.score / 100) * 360);
-</script>
+
+// 历史详情（会话页一次性加载）
+export interface HistoryDetail {
+  session: AgentSessionRes;
+  task: TaskCreateReq;
+  record: ActionRecord | null;
+  createdAt: string;
+}
+
+// 首页列表条目
+export interface SessionCardItem {
+  sessionId: number;
+  taskContent: string;
+  agentSuggestIndex: number;
+  conclusion: string;
+  persuadeMode: PersuadeMode;
+  createdAt: string;
+  hasFeedback: boolean;
+}
+
+// 统计维度
+export interface StatsData {
+  totalSessions: number;
+  executedCount: number;
+  acceptRate: number;
+  modeDistribution: Record<PersuadeMode, number>;
+  willVsComplete: { willScore: number; completed: boolean }[];
+}
 ```
 
-## 七、动画方案（framer‑motion‑vue）
+---
 
-1. **时钟指针动画**：结果页面挂载后，指针从0度平滑转动到目标角度；
-2. **装饰方框**：页面入场时方框逐个淡入；
-3. **页面切换**：页面淡入淡出，风格安静克制，拒绝花哨动效。
+## 七、数据流与接口对接
 
-> 安装依赖
+### Axios 实例（`src/api/http.ts`）
 
+- 请求拦截器：自动注入 `Authorization: Bearer <token>`
+- 响应拦截器：401 → 清 userStore + 跳 `/login?redirect=...`
+- 统一错误抛出，组件层 `try/catch` 显示 message
+
+### 状态管理（Pinia）
+
+| Store | 职责 |
+|---|---|
+| `userStore` | `currentUser`、`token`、`isLoggedIn`、`init()`(从 localStorage 恢复)、`login/logout/register` |
+| `agentStore` | `sessions[]`、`fetchHistory(id)`、`createSession(task)`、`submitRecord(req)`、`deleteSession(id)`、`getSessionWithTask(id)` |
+| `todoStore` | `list[]`、`loadTodos()`、`addTodo/updateTodo/toggleTodo/removeTodo/clearDone`；`loaded` 标记避免重复加载 |
+
+### 关键交互闭环
+
+1. **决策闭环**：填表 → 创建会话 → 跳结果页 → 接受/拒绝 → 接受者入计划表
+2. **执行回写**：首页勾选待办 → `toggleTodo` → 调 `submitRecord` 把 `isExecute=true` 回写 ActionRecord
+3. **重新加入**：计划表删除后，结果页可「重新加入计划表」（重置 `isExecute=false`）
+4. **删除记录**：`deleteSession` 级联删除任务输入/Agent 建议/反馈记录 + 关联待办
+5. **历史摘要动态生成**：后端按用户真实数据计算（同类 ≥3 条按同类统计，否则按整体执行率）
+
+---
+
+## 八、响应式适配
+
+- **PC**：结果页横向 `grid lg:grid-cols-3`，时钟居左（1 列），文案居右（2 列）
+- **移动端**：`grid-cols-1`，时钟置顶，文案纵向堆叠，SVG 时钟按宽度自适应
+- 导航栏：PC 展开菜单 + 收起按钮；移动端默认收起，汉堡切换
+
+---
+
+## 九、迭代优先级（当前进度）
+
+### V1 ✅ 已完成
+
+- 8 页面骨架与交互闭环
+- 手绘 SVG 组件库（9 个 sketch + 2 个 layout）
+- 真实后端联调（JWT + 邮箱验证码 + Agent 全接口 + Todo CRUD + 答案之书/塔罗）
+- 计划表勾选回写 `isExecute`
+- 路由守卫、重定向、标题切换
+- 统计页原生 SVG 图表
+- 删除记录、重新加入计划表
+- pnpm 统一包管理 + vite build 通过
+
+### V2（待办）
+
+1. **接入 DeepSeek LLM**（最高优先）：行动指数/结论/劝说文案目前是规则计算，需替换为 LLM 生成
+2. 个人资料更新接口
+3. 统计聚合接口（目前前端基于会话列表计算）
+4. 塔罗关键词/牌面图展示（后端已返回 `keywords`/`description`/`imageUrl`，前端只显示牌名 + 正逆位）
+5. 验证码存储从内存换 Redis（部署前）
+
+### V3（可选）
+
+- 主题切换（不局限于奶米色）
+- 更多手绘装饰变体
+- 移动端进一步打磨
+
+---
+
+## 十、常用命令
+
+```powershell
+# 前端（d:\just do it，用 pnpm）
+pnpm install
+pnpm dev             # Vite，端口 5174，/api 代理到 3000
+pnpm build           # vue-tsc 类型检查 + vite 构建
+pnpm vue-tsc --noEmit # 仅类型检查
+
+# 后端（d:\just do it\action-agent-nest，独立工程，用 npm）
+npm install
+npm run start:dev    # Nest，端口 3000，watch 模式（改 .env 需手动重启）
+npm test
 ```
-npm install framer‑motion‑vue
-```
 
-## 八、接口对接流程
+---
 
-1. `/task‑create`收集表单`TaskCreateReq` → `POST /agent/session/create`拿到`AgentSessionRes`，携带`sessionId`跳转结果页。
-2. `/session/:id`根据路由id拉取会话数据，渲染时钟（`score = agentSuggestIndex`）、中英对照文案、劝说模式。
-3. 用户点击反馈按钮，调用`POST /agent/action/record`提交`ActionRecordReq`，保存真实行为。
-4. `/history/:id`根据id拉取历史会话渲染。
+## 十一、踩过的坑（精简版）
 
-> Mock模式：Pinia模拟后端返回，后端未完成即可完整演示全部页面交互；后端完成后关闭Mock，直接请求真实接口，页面逻辑无需改动。
-
-## 九、迭代优先级
-
-### V1（MVP优先实现）
-
-- 5个页面骨架完成；基础手绘SVG组件`SketchClock`、`SketchCheckbox`、`LinearButton`完成；
-- 任务填写页 + Agent结果页 + 历史详情页；mock模式跑通完整交互闭环；基础样式对齐视觉；动画可暂时简化。
-
-### V2
-
-- 接入framer‑motion‑vue，补全时钟入场、页面切换动画；完善`/stats`手绘SVG统计图表；完成移动端响应式适配。
-
-### V3
-
-- 开发塔罗展示组件；增加更多手绘装饰变体；增加主题切换（可以切换不同底色，不局限于青绿色）。
-
-## 十、响应式适配
-
-- PC端：结果页**横向布局**：时钟居左，文案居右；
-- 移动端：全部改为纵向堆叠，时钟置于页面顶部，文案依次向下排布；SVG时钟根据屏幕宽度自动缩放。
-
-# 
+1. **MySQL TEXT 列不能设 default**：`executeResult` 用 `default:''` 报错 → 改 `nullable: true`
+2. **PowerShell 不支持 Linux curl 语法**：测试接口用 `irm`（Invoke-RestMethod）
+3. **`Missing script start:dev`**：必须在 `action-agent-nest` 子目录跑（根目录只有 `dev/build/preview`）
+4. **EADDRINUSE :::3000**：旧 dev server 拖留占端口，`Get-NetTCPConnection -LocalPort 3000` 找 PID → `Stop-Process -Id <pid> -Force`
+5. **改 .env 后端不生效**：`nest start --watch` 只监听 .ts，改 .env 必须手动重启
+6. **编辑器改 .env 未保存**：磁盘还是旧 key，排查半天其实是未保存
+7. **塔罗 API**：缘分居示例 key 假的、试用账号不含解读接口 → 换妖狐 API（免费单张抽牌）
+8. **Vue 组件模板用了但没 import**：Dashboard 用了 SketchCheckbox 没 import，渲染为空且无报错；`vue-tsc --noEmit` 能查出
+9. **Vue 模板内联事件在 label 外点文字不生效**：勾选行包 `<label>` 后整行可点
+10. **.env 全角连字符**：占位符 `LLM_API_KEY=sk‑xxxx` 里的 `‑` 是全角（U+2011），填真实 key 注意用半角 `-`
+11. **SketchBorder 内容与边框重叠**：单调 padding 不够，需调整 SVG 元素位置（边框向边缘收缩）
+12. **锁文件混用**（2026-09-17 解决）：前端根目录统一 pnpm，删 `package-lock.json` 并在根 `.gitignore` 用 `/` 锚定忽略（不影响后端 npm）；`package.json` 写 `packageManager: pnpm@10.19.0`
+13. **pnpm 10 拦截 esbuild/vue-demi postinstall**：esbuild 走平台可选依赖、vue-demi 在 Vue3 自动适配，`vite build` 实测正常，无需 `pnpm approve-builds`

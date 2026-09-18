@@ -227,10 +227,10 @@ function reset() {
         <SketchBorder padding="2rem">
           <DualTextBlock cn="如何填写" en="HOW TO FILL" size="md" weight="normal" />
           <ul class="mt-4 space-y-3 text-sm font-light text-sketch-lineSub">
-            <li class="flex gap-2"><SketchCheckbox :size="14" decorative /><span>如实填写意愿与精力，越准越好。</span></li>
+            <li class="flex gap-2"><SketchCheckbox :size="14" decorative /><span>尊重内心去填写意愿与精力。</span></li>
             <li class="flex gap-2"><SketchCheckbox :size="14" decorative /><span>行动指数由 Agent 综合推算。</span></li>
             <li class="flex gap-2"><SketchCheckbox :size="14" decorative /><span>提交后将跳转结果页，可反馈真实行为。</span></li>
-            <li class="flex gap-2"><SketchCheckbox :size="14" decorative /><span>塔罗模式适合纠结难决时开启。</span></li>
+            <li class="flex gap-2"><SketchCheckbox :size="14" decorative /><span>适当选择答案之书或塔罗牌，也许会有意外的答复。</span></li>
           </ul>
         </SketchBorder>
 

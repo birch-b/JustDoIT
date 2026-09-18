@@ -1,0 +1,90 @@
+// 组装发送给 DeepSeek 的 Prompt：把用户任务输入转成结构化指令，要求返回固定 JSON
+import { CreateSessionDto } from './dto/create-session.dto';
+
+// 劝说模式只保留 3 种；塔罗/答案之书是附加选项，不作为劝说模式
+export type PersuadeMode = '温柔劝说模式' | '激将模式' | '理性分析模式';
+
+export interface LlmAdvice {
+  agentSuggestIndex: number;
+  /** LLM 给出的明确行动方向；后端据此把 index 对齐到阈值同侧，保证前端中英文一致 */
+  shouldGo: boolean;
+  conclusion: string;
+  persuadeMode: PersuadeMode;
+  persuadeText: string;
+  minAction: string;
+}
+
+export interface LlmMessage {
+  role: 'system' | 'user';
+  content: string;
+}
+
+const CATEGORY_LABEL: Record<string, string> = {
+  work: '工作',
+  study: '学习',
+  life: '生活',
+  shopping: '购物',
+  health: '健康',
+  social: '社交',
+  other: '其他',
+};
+
+/**
+ * 组装 DeepSeek 调用消息：system 给定角色与输出契约，user 给定任务信息。
+ * 要求模型严格返回 JSON，字段对齐 AgentSessionRes 的核心五项。
+ */
+export function buildPrompt(dto: CreateSessionDto): LlmMessage[] {
+  const categoryLabel = CATEGORY_LABEL[dto.category] ?? dto.category;
+  const userContent = [
+    `任务：${dto.taskContent}`,
+    `类别：${categoryLabel}`,
+    `意愿：${dto.willScore}/10`,
+    `精力：${dto.energyScore}/10`,
+    `重要程度：${dto.importance}/10`,
+    dto.expectCostMin ? `预计耗时：${dto.expectCostMin}分钟` : '预计耗时：未指定',
+    dto.deadline ? `截止日期：${dto.deadline}` : '截止日期：无',
+    dto.location ? `地点：${dto.location}` : '地点：未指定',
+  ].join('\n');
+
+  const systemContent = `你是一个决策辅助 Agent，帮纠结的用户判断"现在是否应该行动"。
+
+根据用户输入的任务信息，判断用户现在是否应该行动。你需要：
+1. 给出明确的行动方向（shouldGo：true=建议去做，false=建议暂缓）
+2. 给出 0~100 的行动指数（agentSuggestIndex）：shouldGo=true 时值必须 ≥55，shouldGo=false 时值必须 ≤45
+3. 给出明确结论（conclusion，10~20 字，shouldGo=true 以"去做"开头，false 以"暂缓"开头）
+4. 先判断用户属于哪种"心理阻力类型"，再据此选择劝说模式（persuadeMode），三选一：
+
+   · 激将模式 —— 用户【不想做但该做】：心里清楚事情重要、也有能力完成，却在拖延、找借口。
+     判定信号：意愿低（≤4）但重要度高（≥7）；或任务有明确临近截止；典型如"明天要交了还在刷手机"。
+     话术：直接点破拖延，用后果、自尊、好胜心刺激，语气锋利直接，不安慰不讨好。
+
+   · 温柔劝说模式 —— 用户【想做但做不动】：有行动意愿，但状态差、怕难、顾虑多，需要被轻轻推一把。
+     判定信号：精力低（≤4），或意愿与重要度一高一低、内心拉扯；典型如"重要但今天很累"。
+     话术：接纳情绪、降低门槛、给台阶，强调"不用做完，先开始一点点"，语气温和。
+
+   · 理性分析模式 —— 用户【能做，需要一个清晰判断】：状态基本在线，缺的不是动力而是权衡和决断。
+     判定信号：意愿与精力都不低（均 ≥5），或任务本身需要权衡（耗时长、有截止、成本高）。
+     话术：摆事实、算收益与成本、直接给结论和理由，冷静客观，不煽情。
+
+   选择原则：先看阻力性质而非只看分数——意愿与重要度严重背离（重要但不想做）优先激将；
+   意愿有但精力跟不上优先温柔；各维度均衡或需要理性权衡时用理性分析。三个模式使用频率应大致均衡，不要回避"激将模式"。
+5. 进行适当劝说（persuadeText，30~80 字，严格符合所选劝说模式的语气，不要给用户太多选择）
+6. 给出一个最小行动（minAction，10~20 字，具体可立即执行的第一步）
+
+必须严格返回 JSON，格式如下：
+{
+  "shouldGo": true,
+  "agentSuggestIndex": 82,
+  "conclusion": "去做，趁现在状态在线",
+  "persuadeMode": "温柔劝说模式",
+  "persuadeText": "虽然精力一般，但这件事重要度较高，不需要一次做完，先开始就行。",
+  "minAction": "先学习15分钟原型链的概念"
+}
+
+注意：shouldGo、agentSuggestIndex、conclusion 三者必须方向一致。persuadeMode 必须是三个值之一，不要返回其他值。只返回 JSON，不要有任何额外文字。`;
+
+  return [
+    { role: 'system', content: systemContent },
+    { role: 'user', content: userContent },
+  ];
+}

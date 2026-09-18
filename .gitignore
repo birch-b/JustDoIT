@@ -15,6 +15,11 @@ coverage
 *.local
 *.tsbuildinfo
 
+# 前端根目录统一使用 pnpm，禁止 npm/yarn 锁文件入库
+# （/ 锚定根目录，不影响 action-agent-nest 后端的 package-lock.json）
+/package-lock.json
+/yarn.lock
+
 # Editor
 .vscode/*
 !.vscode/extensions.json
@@ -23,6 +28,10 @@ coverage
 *.user
 *.sln
 *.sw?
+
+# Agent/skill 工具本地产物
+.agents/
+skills-lock.json
 
 # Env
 .env

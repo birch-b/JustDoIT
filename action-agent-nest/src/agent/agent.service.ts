@@ -10,13 +10,13 @@ import { ActionRecordDto } from './dto/action-record.dto';
 import { AnswerBookService } from './answerbook.service';
 import { TarotService } from './tarot.service';
 import { TodoService } from './todo.service';
+import { LlmService } from './llm.service';
 
-// 劝说模式文案，key 与前端 PersuadeMode 联合类型完全对齐
+// 劝说模式文案（规则 fallback 用），key 与前端 PersuadeMode 联合类型完全对齐
 const PERSUADE_TEXTS: Record<string, string> = {
   温柔劝说模式: '没关系，慢慢来。完成比完美更重要，先迈出第一步。',
   激将模式: '你不是一直说要做吗？现在退缩，下一秒就会后悔。',
   理性分析模式: '综合意愿、精力与重要度评估，当前行动收益高于拖延成本，建议执行。',
-  塔罗模式: '牌面提示转机已至，行动本身即是答案。',
 };
 
 // 塔罗第三方接口不可用时的本地兜底牌面
@@ -34,6 +34,7 @@ export class AgentService {
     private readonly answerBookService: AnswerBookService,
     private readonly tarotService: TarotService,
     private readonly todoService: TodoService,
+    private readonly llmService: LlmService,
   ) {}
 
   /** 创建会话：保存任务 → 计算建议 → 神秘加成 → 保存会话 */
@@ -54,27 +55,9 @@ export class AgentService {
     });
     const savedTask = await this.taskRepo.save(task);
 
-    // 2. 计算行动指数与劝说模式（与前端 mock 规则保持一致）
-    const base = dto.willScore * 5 + dto.energyScore * 3 + dto.importance * 2;
-    const agentSuggestIndex = Math.max(
-      5,
-      Math.min(98, Math.round(base + (dto.willScore - 5) * 2)),
-    );
-
-    let persuadeMode = '理性分析模式';
-    if (dto.enableTarot) {
-      persuadeMode = '塔罗模式';
-    } else if (agentSuggestIndex < 40) {
-      persuadeMode = '激将模式';
-    } else if (agentSuggestIndex < 70) {
-      persuadeMode = '温柔劝说模式';
-    }
-
-    const shouldGo = agentSuggestIndex >= 50;
-    const conclusion = shouldGo ? '去做，趁现在状态在线' : '暂缓，今天不建议强行做';
-    const minAction = shouldGo
-      ? `先做 5 分钟：${dto.taskContent.slice(0, 12)}…`
-      : '今天先记录下来，明天再启动。';
+    // 2. 调 DeepSeek LLM 生成建议（失败时 fallback 到规则计算）
+    const advice = await this.generateAdvice(dto);
+    const { agentSuggestIndex, conclusion, persuadeMode, persuadeText, minAction } = advice;
 
     // 3. 神秘加成：答案之书
     let answerBook: string | null = null;
@@ -100,7 +83,7 @@ export class AgentService {
       agentSuggestIndex,
       conclusion,
       persuadeMode,
-      persuadeText: PERSUADE_TEXTS[persuadeMode],
+      persuadeText,
       minAction,
       taroCard: tarotCards ? tarotCards[0] : null,
       tarotCards: tarotCards ? JSON.stringify(tarotCards) : null,
@@ -187,6 +170,47 @@ export class AgentService {
     await this.taskRepo.delete(taskId);
 
     return { success: true };
+  }
+
+  /** 生成建议：优先 DeepSeek LLM，失败 fallback 到规则计算 */
+  private async generateAdvice(dto: CreateSessionDto) {
+    const llm = await this.llmService.generateAdvice(dto);
+    if (llm) {
+      return llm;
+    }
+    return this.computeAdviceByRule(dto);
+  }
+
+  /** 规则兜底：LLM 不可用时使用（保留原规则逻辑） */
+  private computeAdviceByRule(dto: CreateSessionDto) {
+    const base = dto.willScore * 5 + dto.energyScore * 3 + dto.importance * 2;
+    const agentSuggestIndex = Math.max(
+      5,
+      Math.min(98, Math.round(base + (dto.willScore - 5) * 2)),
+    );
+
+    // 劝说模式只按指数分档；塔罗/答案之书是附加展示，不影响劝说模式
+    let persuadeMode = '理性分析模式';
+    if (agentSuggestIndex < 40) {
+      persuadeMode = '激将模式';
+    } else if (agentSuggestIndex < 70) {
+      persuadeMode = '温柔劝说模式';
+    }
+
+    const shouldGo = agentSuggestIndex >= 50;
+    const conclusion = shouldGo ? '去做，趁现在状态在线' : '暂缓，今天不建议强行做';
+    const minAction = shouldGo
+      ? `先做 5 分钟：${dto.taskContent.slice(0, 12)}…`
+      : '今天先记录下来，明天再启动。';
+
+    return {
+      agentSuggestIndex,
+      shouldGo,
+      conclusion,
+      persuadeMode,
+      persuadeText: PERSUADE_TEXTS[persuadeMode],
+      minAction,
+    };
   }
 
   /** 动态生成历史行为摘要：查询用户真实会话 → 统计同类任务执行情况 */

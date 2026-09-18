@@ -7,6 +7,7 @@ import { AgentService } from './agent.service';
 import { TodoService } from './todo.service';
 import { AnswerBookService } from './answerbook.service';
 import { TarotService } from './tarot.service';
+import { LlmService } from './llm.service';
 import { Task } from './entities/task.entity';
 import { TaskSession } from './entities/task-session.entity';
 import { ActionRecord } from './entities/action-record.entity';
@@ -19,6 +20,6 @@ import { Todo } from './entities/todo.entity';
     TypeOrmModule.forFeature([Task, TaskSession, ActionRecord, Todo]),
   ],
   controllers: [AgentController, TodoController],
-  providers: [AgentService, TodoService, AnswerBookService, TarotService],
+  providers: [AgentService, TodoService, AnswerBookService, TarotService, LlmService],
 })
 export class AgentModule {}

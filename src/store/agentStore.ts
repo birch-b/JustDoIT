@@ -29,7 +29,6 @@ const PERSUADE_MODES: PersuadeMode[] = [
   "温柔劝说模式",
   "激将模式",
   "理性分析模式",
-  "塔罗模式",
 ];
 
 export const useAgentStore = defineStore("agent", {
