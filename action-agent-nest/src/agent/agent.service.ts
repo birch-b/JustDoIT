@@ -37,8 +37,12 @@ export class AgentService {
     private readonly llmService: LlmService,
   ) {}
 
-  /** 创建会话：保存任务 → 计算建议 → 神秘加成 → 保存会话 */
+  /** 创建会话：取历史 → 保存任务 → 计算建议 → 神秘加成 → 保存会话 */
   async createSession(userId: number, dto: CreateSessionDto) {
+    // 0. 先取历史行为摘要（在保存本次任务之前，确保只含"过去"、不含本次）。
+    //    同一份摘要既喂给 LLM 做个性化建议，也用于结果页展示，避免重复查询。
+    const historySummary = await this.buildHistorySummary(userId, dto.category);
+
     // 1. 保存任务输入
     const task = this.taskRepo.create({
       userId,
@@ -55,8 +59,8 @@ export class AgentService {
     });
     const savedTask = await this.taskRepo.save(task);
 
-    // 2. 调 DeepSeek LLM 生成建议（失败时 fallback 到规则计算）
-    const advice = await this.generateAdvice(dto);
+    // 2. 调 DeepSeek LLM 生成建议（带入历史行为；失败时 fallback 到规则计算）
+    const advice = await this.generateAdvice(dto, historySummary);
     const { agentSuggestIndex, conclusion, persuadeMode, persuadeText, minAction } = advice;
 
     // 3. 神秘加成：答案之书
@@ -91,8 +95,7 @@ export class AgentService {
     });
     const savedSession = await this.sessionRepo.save(session);
 
-    // 返回前动态算一次（给 SessionResult 页面展示）
-    const historySummary = await this.buildHistorySummary(userId, dto.category);
+    // 复用开头算好的历史摘要（给 SessionResult 页面展示），不再重复查询
     return this.toSessionRes(savedSession, tarotCards, answerBook, historySummary);
   }
 
@@ -172,9 +175,9 @@ export class AgentService {
     return { success: true };
   }
 
-  /** 生成建议：优先 DeepSeek LLM，失败 fallback 到规则计算 */
-  private async generateAdvice(dto: CreateSessionDto) {
-    const llm = await this.llmService.generateAdvice(dto);
+  /** 生成建议：优先 DeepSeek LLM（带入历史行为），失败 fallback 到规则计算 */
+  private async generateAdvice(dto: CreateSessionDto, historySummary?: string) {
+    const llm = await this.llmService.generateAdvice(dto, historySummary);
     if (llm) {
       return llm;
     }
@@ -213,29 +216,12 @@ export class AgentService {
     };
   }
 
-  /** 动态生成历史行为摘要：查询用户真实会话 → 统计同类任务执行情况 */
+  /**
+   * 动态生成历史行为摘要（喂 LLM + 结果页展示，不入库）。
+   * 方案 B：在「次数/执行率」之外增加跨维度规律——意愿/精力/重要度/耗时 与执行率的关联，
+   * 以及「接受却没执行」。规律仅在样本足够（每组 ≥2）且差异显著（≥25 个百分点）时输出，避免小样本噪声。
+   */
   private async buildHistorySummary(userId: number, currentCategory: string): Promise<string> {
-    // 取该用户最近 50 个会话（不含刚创建的）
-    const sessions = await this.sessionRepo.find({
-      relations: { task: true },
-      where: { task: { userId } },
-      order: { createdAt: 'DESC' },
-      take: 50,
-    });
-    if (sessions.length === 0) {
-      return '这是你的第一个任务，开启行动之旅吧。';
-    }
-
-    // 同类任务（category 相同）
-    const sameCategory = sessions.filter((s) => s.task?.category === currentCategory);
-    const compareList = sameCategory.length >= 3 ? sameCategory : sessions; // 同类不足 3 条则看全部
-
-    const sessionIds = compareList.map((s) => s.id);
-    const records = await this.recordRepo.find({ where: { sessionId: In(sessionIds) } });
-    const hasFeedback = compareList.map((s) => records.find((r) => r.sessionId === s.id)).filter(Boolean) as ActionRecord[];
-    const executedCount = hasFeedback.filter((r) => r.isExecute).length;
-    const totalWithFeedback = hasFeedback.length;
-
     const categoryLabelMap: Record<string, string> = {
       work: '工作',
       study: '学习',
@@ -247,22 +233,102 @@ export class AgentService {
     };
     const categoryLabel = categoryLabelMap[currentCategory] ?? currentCategory;
 
-    if (sameCategory.length >= 3) {
-      // 有足够多的同类任务 → 聚焦同类
-      if (totalWithFeedback === 0) {
-        return `你有 ${sameCategory.length} 次${categoryLabel}类任务尚未记录执行反馈，开始记录吧。`;
-      }
-      const delayed = totalWithFeedback - executedCount;
-      const suffix = delayed === 0 ? '全部执行' : delayed === 1 ? '1 次推迟后补做' : `${delayed} 次推迟后补做`;
-      return `你过去 ${sameCategory.length} 次${categoryLabel}类任务中，${totalWithFeedback} 次已反馈，${executedCount} 次执行，${suffix}。`;
-    } else {
-      // 同类太少 → 看整体
-      if (totalWithFeedback === 0) {
-        return `你累计创建了 ${sessions.length} 个任务，开始记录执行反馈吧。`;
-      }
-      const rate = Math.round((executedCount / totalWithFeedback) * 100);
-      return `你累计 ${sessions.length} 个任务，${totalWithFeedback} 次已反馈，执行率 ${rate}%。`;
+    // 最近 50 个会话 + 其反馈，一次查全（createSession 在保存本次之前调用，故天然不含本次）
+    const sessions = await this.sessionRepo.find({
+      relations: { task: true },
+      where: { task: { userId } },
+      order: { createdAt: 'DESC' },
+      take: 50,
+    });
+    if (sessions.length === 0) {
+      return '这是你的第一个任务，开启行动之旅吧。';
     }
+
+    const records = await this.recordRepo.find({
+      where: { sessionId: In(sessions.map((s) => s.id)) },
+    });
+    const recMap = new Map(records.map((r) => [r.sessionId, r]));
+    // 有反馈的样本（携带任务字段，供跨维度统计）
+    const samples = sessions
+      .map((s) => ({ task: s.task, rec: s.task ? recMap.get(s.id) : undefined }))
+      .filter((x): x is { task: Task; rec: ActionRecord } => !!x.task && !!x.rec);
+
+    if (samples.length === 0) {
+      return `你累计创建了 ${sessions.length} 个任务，但还没有记录执行反馈，开始记录真实行为吧。`;
+    }
+
+    const rateOf = (list: typeof samples) =>
+      Math.round((list.filter((x) => x.rec.isExecute).length / list.length) * 100);
+
+    const sentences: string[] = [];
+
+    // 1) 整体执行率
+    sentences.push(`你累计 ${sessions.length} 个任务，${samples.length} 次已反馈，整体执行率 ${rateOf(samples)}%`);
+
+    // 2) 同类任务（含未反馈计数，累计 ≥3 次才提）
+    const sameAll = sessions.filter((s) => s.task?.category === currentCategory);
+    const sameSamples = samples.filter((x) => x.task.category === currentCategory);
+    if (sameAll.length >= 3) {
+      let t = `其中${categoryLabel}类任务 ${sameAll.length} 次`;
+      if (sameSamples.length > 0) {
+        t += `，已反馈 ${sameSamples.length} 次、执行率 ${rateOf(sameSamples)}%`;
+      }
+      sentences.push(t);
+    }
+
+    // 3) 跨维度规律：每组样本 ≥2 且执行率差 ≥25pp 才算显著，按差异取 top3
+    const insights: { diff: number; text: string }[] = [];
+    const compareDim = (
+      name: string,
+      hi: (t: Task) => boolean,
+      lo: (t: Task) => boolean,
+      hiLabel: string,
+      loLabel: string,
+    ) => {
+      const gHi = samples.filter((x) => hi(x.task));
+      const gLo = samples.filter((x) => lo(x.task));
+      if (gHi.length < 2 || gLo.length < 2) return;
+      const rHi = rateOf(gHi);
+      const rLo = rateOf(gLo);
+      const diff = rHi - rLo;
+      if (Math.abs(diff) < 25) return;
+      const text =
+        diff > 0
+          ? `${name}${hiLabel}时执行率 ${rHi}%，明显高于${loLabel}时的 ${rLo}%`
+          : `${name}${loLabel}时执行率 ${rLo}%，明显高于${hiLabel}时的 ${rHi}%`;
+      insights.push({ diff: Math.abs(diff), text });
+    };
+
+    compareDim('意愿', (t) => t.willScore >= 7, (t) => t.willScore <= 4, '高(≥7)', '低(≤4)');
+    compareDim('精力', (t) => t.energyScore >= 7, (t) => t.energyScore <= 4, '充沛(≥7)', '不足(≤4)');
+    compareDim('重要度', (t) => t.importance >= 8, (t) => t.importance <= 4, '高(≥8)', '低(≤4)');
+    compareDim(
+      '预计耗时',
+      (t) => (t.expectCostMin ?? 0) >= 60,
+      (t) => !!t.expectCostMin && t.expectCostMin < 60,
+      '长(≥60分钟)',
+      '短(<60分钟)',
+    );
+
+    // 「接受建议却没真正执行」规律
+    const accepted = samples.filter((x) => x.rec.userAcceptSuggest);
+    const acceptedNotDone = accepted.filter((x) => !x.rec.isExecute);
+    if (accepted.length >= 3 && acceptedNotDone.length >= 2) {
+      insights.push({
+        diff: 100,
+        text: `接受过 ${accepted.length} 次建议，其中 ${acceptedNotDone.length} 次没有真正执行，容易“答应下来却不动手”`,
+      });
+    }
+
+    if (insights.length > 0) {
+      const top = insights
+        .sort((a, b) => b.diff - a.diff)
+        .slice(0, 3)
+        .map((i) => i.text);
+      sentences.push(`行为规律：${top.join('；')}`);
+    }
+
+    return `${sentences.join('；')}。`;
   }
 
   /** 查询会话并校验属于当前用户 */

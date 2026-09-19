@@ -1,6 +1,6 @@
 # HANDOFF - JUST DO IT（今日行动师）交接文档
 
-> 更新时间：2026-09-18
+> 更新时间：2026-09-19
 
 决策辅助应用：帮助纠结的用户做「做不做」的决定。Vue3 前端 + NestJS 后端（**DeepSeek LLM 生成行动建议** + 答案之书/塔罗牌第三方 API）。
 
@@ -23,7 +23,9 @@
 
 2026-09-17 锁文件治理：前端统一 pnpm——`git rm package-lock.json`、根 `.gitignore` 忽略 `/package-lock.json` 和 `/yarn.lock`、`package.json` 增加 `packageManager: pnpm@10.19.0`；后端仍用 npm。
 
-2026-09-18 **DeepSeek LLM 接入（第一步，本地改动待提交）**：规则判断 → LLM 判断，前端零改动；劝说模式 4→3；统计页图表改 lieflat glance 风格。详见下文「LLM 建议链路」。
+2026-09-18 **第一步 DeepSeek LLM 接入**（commit `6900a5d` 已推送）：规则判断 → LLM 判断，前端零改动；劝说模式 4→3；统计页图表改 lieflat glance 风格。
+
+2026-09-19 **第二步：把历史行为喂给 LLM（本地改动待提交）**：`createSession` 在保存本次任务前先算 `buildHistorySummary`，注入 user prompt 的【用户历史行为】段；并把摘要从"次数/执行率"增强为**跨维度行为规律**（方案 B）。实测 LLM 已能引用真实执行率做个性化激将（如"5 个任务只完成 1 次，25% 执行率"）。**未引入 Memory/向量库/RAG**。详见下文「LLM 建议链路」。
 
 | 模块 | 状态 |
 |---|---|
@@ -69,7 +71,16 @@
   - **规则兜底** `computeAdviceByRule`（LLM 不可用时）：指数 = `willScore*7 + energyScore*3 + importance*2 - 10`（钳 5–98）；指数 <40 激将、40–69 温柔、≥70 理性；结论/文案走内置模板 `PERSUADE_TEXTS`
   - `llm.service.ts` 内 `VALID_MODES` 白名单校验，模型返回已废弃模式名时映射降级
   - 配置：`.env` 的 `LLM_BASE_URL`（https://api.deepseek.com）/ `LLM_API_KEY`（已填真实 key，**.env 不入库**）/ `LLM_MODEL`；改 .env 必须手动重启
-- **动态历史摘要** `buildHistorySummary`：取最近 50 个会话，同类任务 ≥3 条则统计同类执行情况，否则统计整体执行率，每次读取实时计算（不入库）
+- **第二步·历史注入（2026-09-19）**：
+  - `createSession` 在**保存本次任务之前**先调 `buildHistorySummary(userId, category)`（只含过去、不含本次），同一份摘要既传给 `llmService.generateAdvice(dto, historySummary)` → `buildPrompt` 的【用户历史行为】段，又用于结果页展示，避免重复查询
+  - system prompt 第 7 条：要求结合真实历史针对性劝说（"常接受却没执行"就点破并把 minAction 压到极小），**只能依据给出的历史、严禁臆造**；无历史（新用户）则不传该段
+  - 这仍是当次上下文，**不是 Memory**：不建表、不持久化画像、无 embedding/RAG/多轮
+- **行为摘要 `buildHistorySummary`（方案 B 增强，2026-09-19）**：取最近 50 个会话 + 其 action_record，一次查全，输出三层：
+  1. 整体：任务数 / 反馈数 / 整体执行率
+  2. 同类（该 category 累计 ≥3 次才提）：次数 / 反馈数 / 执行率
+  3. **跨维度行为规律（top3，新增）**：意愿(≥7 vs ≤4)、精力(≥7 vs ≤4)、重要度(≥8 vs ≤4)、预计耗时(≥60min vs <60min) 各自的执行率对比；以及"接受 ≥3 次但 ≥2 次没执行"
+     - 防噪声：每组样本 ≥2、执行率差 ≥25 个百分点才算显著，按差异排序只留 top3，小样本维度直接跳过
+  - 每次读取实时计算，不入库；前端 SessionResult「历史真实行为摘要」直接展示同一段
 - 所有查询带归属校验，越权抛 `ForbiddenException`
 
 **Todo 模块**（`src/agent/todo.controller.ts` / `todo.service.ts`，`/todos` 全部需 JWT）：
@@ -124,6 +135,7 @@
 - 越权访问他人 session/todo 返回 403；未登录访问受保护接口 401
 - 答案之书真实神谕；塔罗真实牌面（带 keywords/description/imageUrl，前端目前仅展示牌名+正逆位）
 - **LLM 链路（2026-09-18）**：真实任务返回动态劝说文案（非内置四句模板）；指数与中英文结论方向一致；**激将模式**用「意愿 2 / 精力 6 / 重要度 9 + 临近截止」配方可稳定触发；LLM 返回非法/超时会静默降级规则文案（后端 warn 日志）
+- **历史个性化（2026-09-19 实测）**：攒 5 个任务（仅完成 1 个）后再建「意愿 4 / 重要度 8 / 30min」任务，LLM 正确选激将模式并引用真实数据——劝说文案出现"5 个任务只完成 1 次，25% 的执行率"，minAction 压到"打开项目，只写一个函数"；证明历史规律确实进入了 prompt 并影响输出
 
 ---
 
@@ -134,20 +146,21 @@
 | 个人资料修改不同步 | 已知限制 | 后端无 update 接口，用户名/邮箱/bio 编辑只写 localStorage |
 | 统计无后端接口 | 可接受 | 前端基于 `GET /sessions` 全量列表聚合，数据量大后需后端聚合 |
 | 验证码内存存储 | 已知限制 | 服务重启即失效，多实例部署不共享；上线前需换 Redis/DB |
-| LLM 暂未利用历史 | 第二步待做 | 第一步 prompt 只含当前任务，`historySummary` 未喂给模型；多轮/记忆/RAG 均未做 |
 
 ---
 
 ## 四、下一步计划（按优先级）
 
-**第一步（规则 → DeepSeek）已完成 ✅**，且严格未动前端数据契约。接下来：
+**第一步（规则 → DeepSeek）已完成 ✅**（commit `6900a5d`）。
+**第二步（当前任务 + 历史行为 → DeepSeek）已完成 ✅**（2026-09-19，待提交），含方案 B 跨维度规律；全程未动前端数据契约、未引入 Memory/RAG。接下来：
 
-1. **第二步：把历史喂给 LLM**——`buildUserPrompt` 注入该用户的 historySummary / 近期同类任务执行情况，让建议个性化；仍只做单轮、结构化 JSON，不引入 Memory/RAG/向量库
-2. 后端补用户资料更新接口（username/email/bio），前端 `updateProfile` 改为真实调用
-3. （可选）统计聚合接口，避免前端拉全量会话
-4. 塔罗结果页展示关键词/解读/牌面图（后端数据已返回，前端未用）
-5. 验证码存储替换为 Redis/DB（部署前必做）
-6. 更后阶段才考虑：Memory / RAG / 向量数据库 / MCP / 多 Agent / 自动人格总结（第一步明确不做，第二步也暂不做）
+1. **第三步：显式用户偏好 → Memory**——新增持久化的用户偏好/画像（可由规则或简单提取写入），跨会话长期记住稳定特征（如"长期低意愿高重要度""总在周末执行"）。届时才需要新表，仍可不做 embedding
+2. **第四步：LLM 自动提取偏好写回 Memory**——在反馈/会话后让模型抽取稳定偏好入库
+3. 后端补用户资料更新接口（username/email/bio），前端 `updateProfile` 改为真实调用
+4. （可选）统计聚合接口，避免前端拉全量会话
+5. 塔罗结果页展示关键词/解读/牌面图（后端数据已返回，前端未用）
+6. 验证码存储替换为 Redis/DB（部署前必做）
+7. 更后阶段才考虑：RAG / 向量数据库 / Embedding / MCP / 多 Agent / 多轮对话（第二步明确不做，第三、四步也暂不需要）
 
 ---
 

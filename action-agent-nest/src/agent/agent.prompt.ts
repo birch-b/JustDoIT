@@ -30,12 +30,13 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 /**
- * 组装 DeepSeek 调用消息：system 给定角色与输出契约，user 给定任务信息。
+ * 组装 DeepSeek 调用消息：system 给定角色与输出契约，user 给定任务信息 + 用户历史行为。
  * 要求模型严格返回 JSON，字段对齐 AgentSessionRes 的核心五项。
+ * historySummary 为该用户真实历史统计（第二步），无历史时不传。
  */
-export function buildPrompt(dto: CreateSessionDto): LlmMessage[] {
+export function buildPrompt(dto: CreateSessionDto, historySummary?: string): LlmMessage[] {
   const categoryLabel = CATEGORY_LABEL[dto.category] ?? dto.category;
-  const userContent = [
+  const taskLines = [
     `任务：${dto.taskContent}`,
     `类别：${categoryLabel}`,
     `意愿：${dto.willScore}/10`,
@@ -44,7 +45,14 @@ export function buildPrompt(dto: CreateSessionDto): LlmMessage[] {
     dto.expectCostMin ? `预计耗时：${dto.expectCostMin}分钟` : '预计耗时：未指定',
     dto.deadline ? `截止日期：${dto.deadline}` : '截止日期：无',
     dto.location ? `地点：${dto.location}` : '地点：未指定',
-  ].join('\n');
+  ];
+
+  // 第二步：把真实历史行为喂给模型，让建议个性化（不是 Memory/人格总结，仅当次上下文）
+  if (historySummary && historySummary.trim()) {
+    taskLines.push('', '【用户历史行为】', historySummary);
+  }
+
+  const userContent = taskLines.join('\n');
 
   const systemContent = `你是一个决策辅助 Agent，帮纠结的用户判断"现在是否应该行动"。
 
@@ -70,6 +78,9 @@ export function buildPrompt(dto: CreateSessionDto): LlmMessage[] {
    意愿有但精力跟不上优先温柔；各维度均衡或需要理性权衡时用理性分析。三个模式使用频率应大致均衡，不要回避"激将模式"。
 5. 进行适当劝说（persuadeText，30~80 字，严格符合所选劝说模式的语气，不要给用户太多选择）
 6. 给出一个最小行动（minAction，10~20 字，具体可立即执行的第一步）
+7. 如果用户消息中提供了【用户历史行为】，必须结合其真实行为模式给出更有针对性的建议：
+   例如历史显示其"常接受建议却没有真正执行"，就在 persuadeText 里点破这一规律，并把 minAction 压到更小、更不可能拖延（如"只打开文档/只看第一个知识点"）；
+   历史执行率低时少讲大道理、强执行率高时可直接推动。只能依据给出的历史内容，严禁臆造或脑补用户没有提供的过往经历。
 
 必须严格返回 JSON，格式如下：
 {

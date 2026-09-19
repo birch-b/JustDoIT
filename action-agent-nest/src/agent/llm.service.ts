@@ -17,12 +17,12 @@ export class LlmService {
   private readonly model = process.env.LLM_MODEL || 'deepseek-chat';
 
   /** 调 DeepSeek 生成决策建议；key 未配置或调用失败返回 null（由 AgentService fallback） */
-  async generateAdvice(dto: CreateSessionDto): Promise<LlmAdvice | null> {
+  async generateAdvice(dto: CreateSessionDto, historySummary?: string): Promise<LlmAdvice | null> {
     if (!this.apiKey || this.apiKey.includes('你的key')) {
       this.logger.warn('LLM_API_KEY 未配置或仍为占位符，跳过 LLM 调用');
       return null;
     }
-    const messages = buildPrompt(dto);
+    const messages = buildPrompt(dto, historySummary);
     try {
       const resp = await fetch(`${this.baseUrl}/v1/chat/completions`, {
         method: 'POST',
@@ -48,7 +48,7 @@ export class LlmService {
         return null;
       }
       const parsed = JSON.parse(content) as LlmAdvice;
-      // 字段校验：persuadeMode 必须是四个之一
+      // 字段校验：persuadeMode 必须是三个之一
       if (!VALID_MODES.includes(parsed.persuadeMode)) {
         this.logger.warn(`DeepSeek 返回未知 persuadeMode: ${parsed.persuadeMode}，降级为理性分析模式`);
         parsed.persuadeMode = '理性分析模式';
