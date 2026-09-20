@@ -61,6 +61,14 @@ export const agentApi = {
     });
   },
 
+  /** 批量删除会话：DELETE /agent/sessions，body { ids }（需登录，逐个校验归属） */
+  batchDeleteSessions(ids: number[]): Promise<{ success: boolean; deleted: number }> {
+    return authRequest<{ success: boolean; deleted: number }>(`${BASE_URL}/sessions`, {
+      method: "DELETE",
+      body: JSON.stringify({ ids }),
+    });
+  },
+
   /**
    * 答案之书：GET /api/agent/answer-book?question=xxx
    * 公开接口；失败返回 null，由前端兜底 mock

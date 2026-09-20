@@ -62,6 +62,64 @@ onMounted(() => {
 const cards = computed(() => store.cardList);
 const isEmpty = computed(() => cards.value.length === 0);
 
+// 批量管理模式
+const selectMode = ref(false);
+const deleting = ref(false);
+const selectedIds = ref<number[]>([]);
+const selectedCount = computed(() => selectedIds.value.length);
+const allSelected = computed(
+  () => cards.value.length > 0 && selectedIds.value.length === cards.value.length,
+);
+function isSelected(id: number): boolean {
+  return selectedIds.value.includes(id);
+}
+function enterSelect() {
+  if (!requireLogin() || cards.value.length === 0) return;
+  selectMode.value = true;
+}
+function exitSelect() {
+  selectMode.value = false;
+  selectedIds.value = [];
+}
+function toggleSelect(id: number) {
+  if (isSelected(id)) {
+    selectedIds.value = selectedIds.value.filter((x) => x !== id);
+  } else {
+    selectedIds.value = [...selectedIds.value, id];
+  }
+}
+function toggleSelectAll() {
+  selectedIds.value = allSelected.value
+    ? []
+    : cards.value.map((c) => c.sessionId);
+}
+async function batchDelete() {
+  if (deleting.value || !selectedIds.value.length) return;
+  const n = selectedIds.value.length;
+  if (
+    !window.confirm(
+      `确定删除选中的 ${n} 条决策记录吗？任务输入、Agent 建议、反馈以及由它们加入计划表的待办将一并删除，且不可恢复。`,
+    )
+  )
+    return;
+  deleting.value = true;
+  try {
+    await store.batchDeleteSessions([...selectedIds.value]);
+    // 关联待办可能已被后端清理，同步计划表
+    if (isLoggedIn.value) await todoStore.loadTodos();
+    exitSelect();
+  } catch (e) {
+    window.alert((e as Error).message || "删除失败，请稍后再试");
+  } finally {
+    deleting.value = false;
+  }
+}
+// 卡片点击：管理模式下勾选，否则进入详情
+function onCardClick(id: number) {
+  if (selectMode.value) toggleSelect(id);
+  else goSession(id);
+}
+
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -233,11 +291,44 @@ function goLogin() {
 
     <!-- 历史会话卡片列表 -->
     <section>
-      <div class="flex items-end justify-between mb-6 sketch-border-b pb-3">
+      <div class="flex flex-wrap items-end justify-between gap-3 mb-6 sketch-border-b pb-3">
         <DualTextBlock cn="历史会话" en="RECENT SESSIONS" size="md" weight="normal" />
-        <span class="text-xs text-sketch-lineSub font-en tracking-widest">
-          {{ cards.length }} ITEMS
-        </span>
+        <!-- 普通模式：数量 + 批量管理入口 -->
+        <div v-if="!selectMode" class="flex items-center gap-4">
+          <span class="text-xs text-sketch-lineSub font-en tracking-widest">
+            {{ cards.length }} ITEMS
+          </span>
+          <button
+            v-if="isLoggedIn && !isEmpty"
+            class="text-xs text-sketch-lineSub hover:text-sketch-line whitespace-nowrap opacity-70 hover:opacity-100 transition-opacity"
+            @click="enterSelect"
+          >
+            批量管理
+          </button>
+        </div>
+        <!-- 管理模式：全选 / 删除选中 / 取消 -->
+        <div v-else class="flex flex-wrap items-center gap-3 text-xs">
+          <button
+            class="text-sketch-lineSub hover:text-sketch-line whitespace-nowrap"
+            @click="toggleSelectAll"
+          >
+            {{ allSelected ? "取消全选" : "全选" }}
+          </button>
+          <button
+            class="border border-sketch-line/50 px-2.5 py-1 whitespace-nowrap transition-opacity"
+            :class="selectedCount === 0 || deleting ? 'opacity-40 pointer-events-none' : 'hover:bg-sketch-hover'"
+            @click="batchDelete"
+          >
+            {{ deleting ? "删除中…" : `删除选中（${selectedCount}）` }}
+          </button>
+          <button
+            class="text-sketch-lineSub hover:text-sketch-line whitespace-nowrap"
+            :class="{ 'pointer-events-none opacity-40': deleting }"
+            @click="exitSelect"
+          >
+            取消
+          </button>
+        </div>
       </div>
 
       <!-- 空状态 -->
@@ -258,15 +349,28 @@ function goLogin() {
 
       <!-- 卡片网格 -->
       <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        <button
+        <component
+          :is="selectMode ? 'div' : 'button'"
           v-for="card in cards"
           :key="card.sessionId"
-          class="group relative min-h-[210px] text-left transition-colors duration-200 hover:bg-sketch-hover"
-          @click="goSession(card.sessionId)"
+          class="group relative min-h-[210px] block w-full text-left cursor-pointer transition-colors duration-200 hover:bg-sketch-hover"
+          :class="{ 'bg-sketch-hover': selectMode && isSelected(card.sessionId) }"
+          :aria-pressed="selectMode ? isSelected(card.sessionId) : undefined"
+          @click="onCardClick(card.sessionId)"
         >
           <SketchBorder padding="1.75rem" class="h-full">
             <div class="flex items-start justify-between gap-3">
-              <p class="text-base font-light leading-snug line-clamp-2">
+              <!-- 管理模式勾选框（不单独绑事件，点击冒泡给整卡统一处理，避免双重切换） -->
+              <SketchCheckbox
+                v-if="selectMode"
+                :size="18"
+                :model-value="isSelected(card.sessionId)"
+                class="mt-0.5 shrink-0"
+              />
+              <p
+                class="text-base font-light leading-snug line-clamp-2"
+                :class="selectMode ? 'flex-1' : ''"
+              >
                 {{ card.taskContent }}
               </p>
               <!-- 行动指数：右上角，删除按钮在右下角不冲突 -->
@@ -297,11 +401,8 @@ function goLogin() {
     </span>
   </div>
 </div>
-
-
-          
           </SketchBorder>
-        </button>
+        </component>
       </div>
     </section>
   </PageWrapper>

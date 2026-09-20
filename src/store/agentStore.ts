@@ -183,5 +183,16 @@ export const useAgentStore = defineStore("agent", {
       );
       return true;
     },
+
+    /** 批量删除会话：成功后一次性移除本地缓存，返回删除条数 */
+    async batchDeleteSessions(ids: number[]): Promise<number> {
+      if (!ids.length) return 0;
+      const res = await agentApi.batchDeleteSessions(ids);
+      const idSet = new Set(ids);
+      this.sessions = this.sessions.filter(
+        (s) => !idSet.has(s.session.sessionId)
+      );
+      return res.deleted;
+    },
   },
 });

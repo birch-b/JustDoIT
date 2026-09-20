@@ -15,8 +15,7 @@ import DecorDotCluster from "@/components/sketch/DecorDotCluster.vue";
 
 // ── custom 色板角色 ──────────────────────────────────────────────
 const INK = "#634442"; // 炭棕：主数据/文字
-const HERO = "#A9C8C2"; // 薄荷灰绿：已执行/主角（填充）
-const HERO_DEEP = "#7FA89F"; // 薄荷描边（奶米底上保证对比度）
+const HERO_DEEP = "#7FA89F"; // 薄荷灰绿（奶米底上保证对比度）：已执行/主角
 const MUT = "rgba(99,68,66,0.55)"; // 次要文字
 const FAINT = "rgba(99,68,66,0.28)"; // 空 tick / 刻度
 const GRID = "rgba(99,68,66,0.2)"; // 发丝导轨
@@ -75,80 +74,62 @@ const modeRows = computed(() => {
   });
 });
 
-// ── 图 3：意愿分 × 完成率（glance-stroke 一笔画曲线 + 底层单位点）──
-const DOT_X0 = 44;
-const DOT_X1 = 372;
-const DOT_BASE = 206; // 曲线地板
-const DOT_TOP = 34; // 100% 对应的顶部
+// ── 图 3：意愿分 × 执行（双点散点）────────
+// x=意愿分 1-10，y=次数。每个意愿分最多两个点：
+//   实心点高度=做了几次，空心点高度=没做几次（一个点代表该类全部次数）。
+// 两个次数相同会重叠时，左右错开放同一行。y 严格对齐刻度，仅 x/半径轻微手绘抖动。
+const BUB_X0 = 44;
+const BUB_X1 = 372;
+const BUB_BASE = 202; // 基线（0 次）
+const BUB_TOP = 40; // 绘图顶部
+const DOT_R = 7.2;
+const PAIR_DX = 9; // 同次数时实心/空心左右错开的位移
 const willChart = computed(() => {
-  const cw = (DOT_X1 - DOT_X0) / 10;
-  // 按意愿分分桶，保留每条真实反馈记录
+  const cw = (BUB_X1 - BUB_X0) / 10;
+  // 按意愿分分桶
   const buckets: Record<number, boolean[]> = {};
   for (let w = 1; w <= 10; w++) buckets[w] = [];
   stats.value.willVsComplete.forEach((p) => buckets[p.willScore]?.push(p.completed));
 
-  const maxCol = Math.max(1, ...Object.values(buckets).map((b) => b.length));
-  const pitch = Math.max(7, Math.min(12, 150 / maxCol));
-  const size = 5; // 底层证据点统一缩小
+  const cols = Object.entries(buckets).map(([w, arr]) => ({
+    w: Number(w),
+    cx: BUB_X0 + (Number(w) - 0.5) * cw,
+    doneN: arr.filter(Boolean).length,
+    undoneN: arr.filter((x) => !x).length,
+    long: Number(w) === 1 || Number(w) === 5 || Number(w) === 10,
+  }));
 
-  const cols = Object.entries(buckets).map(([w, arr]) => {
-    const wn = Number(w);
-    const cx = DOT_X0 + (wn - 0.5) * cw;
-    const done = arr.filter(Boolean).length;
-    return {
-      w: wn,
-      cx,
-      total: arr.length,
-      done,
-      rate: arr.length ? Math.round((done / arr.length) * 100) : null,
-      long: wn === 1 || wn === 5 || wn === 10,
-    };
-  });
+  const maxN = Math.max(1, ...cols.flatMap((c) => [c.doneN, c.undoneN]));
+  // 次数→像素：≤8 次用固定层距，更多再压缩
+  const pitch = maxN <= 8 ? 18 : (BUB_BASE - BUB_TOP - 8) / maxN;
+  const yFor = (n: number) => BUB_BASE - DOT_R - 3 - (n - 1) * pitch;
 
-  // 底层证据点（缩小、淡化，曲线是主角）
-  const dots = Object.entries(buckets).flatMap(([w, arr]) => {
-    const wn = Number(w);
-    const cx = DOT_X0 + (wn - 0.5) * cw;
-    return arr.map((completed, idx) => ({
-      x: cx + (rnd(idx + 3, wn) - 0.5) * 9 - size / 2,
-      y: DOT_BASE - 7 - idx * pitch - rnd(idx + 7, wn + 4) * 1.5 - size / 2,
-      size,
+  // 每个意愿分：一个实心点(执行次数) + 一个空心点(未执行次数)；同次数则左右排开
+  const dots = cols.flatMap((c, ci) => {
+    const same = c.doneN > 0 && c.doneN === c.undoneN;
+    const mk = (completed: boolean, n: number, side: -1 | 0 | 1) => ({
+      w: c.w,
       completed,
-    }));
+      n,
+      cx: c.cx + side * PAIR_DX + (rnd(c.w * 7 + (completed ? 1 : 2), 5) - 0.5) * 1.6,
+      cy: yFor(n), // y 严格对齐次数刻度，不抖动
+      r: DOT_R + (rnd(c.w * 7 + (completed ? 3 : 4), 9) - 0.5) * 1.8,
+      delay: 0.12 + ci * 0.06 + (completed ? 0 : 0.05),
+    });
+    const out: ReturnType<typeof mk>[] = [];
+    if (c.doneN > 0) out.push(mk(true, c.doneN, same ? -1 : 0));
+    if (c.undoneN > 0) out.push(mk(false, c.undoneN, same ? 1 : 0));
+    return out;
   });
 
-  // 有数据的列才是曲线顶点；rate→y
-  const pts = cols
-    .filter((c) => c.rate !== null)
-    .map((c) => ({ x: c.cx, y: DOT_BASE - (c.rate as number) / 100 * (DOT_BASE - DOT_TOP), w: c.w, rate: c.rate as number, total: c.total }));
+  // y 轴次数刻度 0..maxN
+  const yTicks = Array.from({ length: maxN + 1 }, (_, k) => ({
+    k,
+    y: k === 0 ? BUB_BASE : yFor(k),
+  }));
 
-  // Catmull-Rom → 三次贝塞尔，生成平滑曲线
-  const linePath = smoothPath(pts);
-  const areaPath = pts.length >= 2
-    ? `${linePath} L ${pts[pts.length - 1].x} ${DOT_BASE} L ${pts[0].x} ${DOT_BASE} Z`
-    : "";
-
-  return { cols, dots, pts, linePath, areaPath, empty: pts.length === 0 };
+  return { cols, dots, yTicks, empty: dots.length === 0 };
 });
-
-/** Catmull-Rom 样条转 SVG 贝塞尔 path；不足 2 点退化为线段/空 */
-function smoothPath(pts: { x: number; y: number }[]): string {
-  if (pts.length === 0) return "";
-  if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
-  let d = `M ${pts[0].x} ${pts[0].y}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] ?? pts[i];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[i + 2] ?? p2;
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
-  }
-  return d;
-}
 
 // 散落装饰：手绘方框（波点由 DecorDotCluster 统一渲染）
 interface BoxDeco {
@@ -175,7 +156,7 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
     </div>
 
     <!-- 顶部 KPI：接受率带 tick gauge -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-5 mb-8 sm:mb-10">
       <SketchBorder padding="2rem">
         <DualTextBlock cn="总会话数" en="TOTAL SESSIONS" size="sm" weight="normal" />
         <p class="mt-3 text-4xl font-light font-en">{{ stats.totalSessions }}</p>
@@ -212,7 +193,7 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
       </SketchBorder>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+    <div class="grid grid-cols-1 gap-8 md:grid-cols-2 md:gap-8 lg:gap-10">
       <!-- 图 2：劝说模式 tick rows -->
       <SketchBorder padding="2.25rem">
         <DualTextBlock cn="劝说模式分布" en="PERSUADE MODE DISTRIBUTION" size="md" weight="normal" />
@@ -271,23 +252,21 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
         </svg>
       </SketchBorder>
 
-      <!-- 图 3：意愿分 × 执行情况 单位点阵 -->
+      <!-- 图 3：意愿分 × 执行情况 porcelain 气泡年鉴 -->
       <SketchBorder padding="2.25rem">
         <div class="flex items-start justify-between gap-3">
           <DualTextBlock cn="意愿分数与执行" en="WILL SCORE × EXECUTION" size="md" weight="normal" />
-          <!-- 图例 -->
+          <!-- 图例：实心=已执行，空心=未执行 -->
           <div class="flex shrink-0 items-center gap-3 pt-1 text-[10px] text-sketch-lineSub">
             <span class="flex items-center gap-1.5 whitespace-nowrap">
-              <span
-                class="inline-block h-2.5 w-2.5"
-                :style="{ background: HERO, border: `1px solid ${HERO_DEEP}` }"
-              />已执行
+              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                <circle cx="7" cy="7" r="5" :fill="HERO_DEEP" />
+              </svg>已执行
             </span>
             <span class="flex items-center gap-1.5 whitespace-nowrap">
-              <span
-                class="inline-block h-2.5 w-2.5"
-                :style="{ border: `1.2px solid ${INK}` }"
-              />未执行
+              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                <circle cx="7" cy="7" r="5" fill="#FFF2E1" :stroke="MUT" stroke-width="1.4" />
+              </svg>未执行
             </span>
           </div>
         </div>
@@ -300,35 +279,36 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
           </p>
         </div>
 
-        <svg v-else viewBox="0 0 400 262" class="mt-4 w-full" role="img" aria-label="意愿分数与完成率趋势曲线">
-          <defs>
-            <!-- 曲线下方薄荷渐变填充 -->
-            <linearGradient id="willArea" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#A9C8C2" stop-opacity="0.55" />
-              <stop offset="100%" stop-color="#A9C8C2" stop-opacity="0.04" />
-            </linearGradient>
-          </defs>
-
-          <!-- y 轴只标两端：100%=全部执行（顶）、0%=全部未执行（地板） -->
-          <line :x1="DOT_X0" :y1="DOT_TOP" :x2="DOT_X1" :y2="DOT_TOP" :stroke="FAINT" stroke-width="0.6" stroke-dasharray="2 3" />
+        <svg v-else viewBox="0 0 400 262" class="mt-4 w-full" role="img" aria-label="意愿分数与执行双点图：横轴意愿1到10，纵轴次数；每个意愿分上实心点高度为已执行次数、空心点高度为未执行次数，次数相同时左右排开">
+          <!-- y 轴：次数（横向导轨 + 左侧数字，对齐每一层圆点） -->
+          <g v-for="t in willChart.yTicks" :key="`y${t.k}`">
+            <line
+              v-if="t.k > 0"
+              :x1="BUB_X0" :y1="t.y" :x2="BUB_X1" :y2="t.y"
+              :stroke="GRID" stroke-width="0.5"
+            />
+            <text
+              :x="BUB_X0 - 9" :y="t.y + 2.5" text-anchor="end"
+              :fill="t.k === 0 ? MUT : FAINT" font-size="7" font-weight="600"
+              font-family="Inter, sans-serif"
+            >{{ t.k }}</text>
+          </g>
+          <!-- y 轴标题 -->
           <text
-            :x="DOT_X0 - 8" :y="DOT_TOP + 2.5" text-anchor="end"
-            :fill="FAINT" font-size="7" font-weight="600" font-family="Inter, sans-serif"
-          >100%</text>
-          <line :x1="DOT_X0" :y1="DOT_BASE" :x2="DOT_X1" :y2="DOT_BASE" :stroke="GRID" stroke-width="0.9" />
-          <text
-            :x="DOT_X0 - 8" :y="DOT_BASE + 2.5" text-anchor="end"
-            :fill="MUT" font-size="7" font-weight="600" font-family="Inter, sans-serif"
-          >0%</text>
+            :x="BUB_X0 - 26" :y="BUB_TOP - 6" text-anchor="middle"
+            :fill="MUT" font-size="7.5" font-weight="600"
+            font-family="'Noto Sans SC', Inter, sans-serif"
+          >次数</text>
 
-          <!-- barcode 地板刻度 + 列号 1-10 -->
+          <!-- x 基线 + 列刻度 + 意愿分 1-10 -->
+          <line :x1="BUB_X0" :y1="BUB_BASE" :x2="BUB_X1" :y2="BUB_BASE" :stroke="GRID" stroke-width="0.9" />
           <line
             v-for="c in willChart.cols"
             :key="`b${c.w}`"
             :x1="c.cx"
-            :y1="DOT_BASE"
+            :y1="BUB_BASE"
             :x2="c.cx"
-            :y2="c.long ? DOT_BASE + 9 : DOT_BASE + 5"
+            :y2="c.long ? BUB_BASE + 9 : BUB_BASE + 5"
             :stroke="FAINT"
             stroke-width="0.7"
           />
@@ -336,76 +316,32 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
             v-for="c in willChart.cols"
             :key="`x${c.w}`"
             :x="c.cx"
-            :y="DOT_BASE + 20"
+            :y="BUB_BASE + 20"
             text-anchor="middle"
             :fill="c.long ? MUT : FAINT"
             font-size="7.5"
             font-weight="600"
             font-family="Inter, sans-serif"
           >{{ c.w }}</text>
-          <!-- x 轴标题：意愿分数 1→10 -->
           <text
-            :x="(DOT_X0 + DOT_X1) / 2" :y="DOT_BASE + 34" text-anchor="middle"
+            :x="(BUB_X0 + BUB_X1) / 2" :y="BUB_BASE + 34" text-anchor="middle"
             :fill="MUT" font-size="8" font-weight="600"
             font-family="'Noto Sans SC', Inter, sans-serif" letter-spacing="0.05em"
-          >意愿分数 WILL SCORE · 1 不想做 → 10 很想做</text>
+          >意愿分数 · 1 不想做 → 10 很想做</text>
 
-          <!-- 底层证据点：1 方框 = 1 次有反馈决策（淡化，曲线为主角） -->
-          <rect
+          <!-- 决策气泡：自下而上逐个弹入；实心沉底=已执行，空心摞其上=未执行 -->
+          <circle
             v-for="(d, i) in willChart.dots"
             :key="`d${i}`"
-            :x="d.x"
-            :y="d.y"
-            :width="d.size"
-            :height="d.size"
-            :fill="d.completed ? HERO : 'none'"
-            :stroke="d.completed ? HERO_DEEP : FAINT"
-            :stroke-width="0.9"
-            :opacity="d.completed ? 0.55 : 0.8"
+            :cx="d.cx"
+            :cy="d.cy"
+            :r="d.r"
+            :fill="d.completed ? HERO_DEEP : '#FFF2E1'"
+            :stroke="d.completed ? HERO_DEEP : MUT"
+            :stroke-width="d.completed ? 0 : 1.4"
+            class="box-pop"
+            :style="{ animationDelay: `${d.delay}s` }"
           />
-
-          <!-- 曲线下方填充（≥2 点） -->
-          <path v-if="willChart.areaPath" :d="willChart.areaPath" fill="url(#willArea)" class="area-fade" />
-          <!-- 一笔画平滑曲线 -->
-          <path
-            v-if="willChart.pts.length >= 2"
-            :d="willChart.linePath"
-            fill="none"
-            :stroke="HERO_DEEP"
-            stroke-width="2.1"
-            stroke-linecap="round"
-            class="stroke-draw"
-            pathLength="1"
-          />
-          <!-- 顶点：手绘小方框 + 完成率标签 -->
-          <g v-for="(p, i) in willChart.pts" :key="`p${i}`">
-            <rect
-              class="box-pop"
-              :x="p.x - 3.5"
-              :y="p.y - 3.5"
-              width="7"
-              height="7"
-              :fill="p.rate >= 50 ? HERO : '#FFF2E1'"
-              :stroke="HERO_DEEP"
-              stroke-width="1.4"
-              :style="{ animationDelay: `${0.5 + i * 0.12}s` }"
-            />
-            <text
-              :x="p.x"
-              :y="p.y - 8"
-              text-anchor="middle"
-              :fill="HERO_DEEP"
-              font-size="8"
-              font-weight="800"
-              font-family="Inter, sans-serif"
-              style="paint-order: stroke; stroke: #fff2e1; stroke-width: 2.5px"
-            >{{ p.rate }}%</text>
-          </g>
-
-          <text
-            x="208" y="258" text-anchor="middle" font-size="7" font-weight="600"
-            :fill="FAINT" font-family="Inter, sans-serif" letter-spacing="0.1em"
-          >CURVE = COMPLETION RATE · SMALL BOX = ONE DECISION WITH FEEDBACK</text>
         </svg>
       </SketchBorder>
     </div>

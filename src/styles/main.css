@@ -7,6 +7,8 @@
   body,
   #app {
     height: 100%;
+    /* 防止任何页面内容横向溢出造成整页左右滑；clip 不产生滚动容器，不破坏 sticky 导航 */
+    overflow-x: clip;
   }
 
   body {

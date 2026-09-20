@@ -4,6 +4,7 @@ import { TarotService, TarotResult } from './tarot.service';
 import { AgentService } from './agent.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { ActionRecordDto } from './dto/action-record.dto';
+import { BatchDeleteSessionsDto } from './dto/batch-delete-sessions.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { GetUser } from '../common/decorators/get-user.decorator';
 
@@ -79,7 +80,16 @@ export class AgentController {
     return this.agentService.submitRecord(userId, dto);
   }
 
-  /** 删除会话记录：DELETE /api/agent/session/:id（需登录，校验归属） */
+  /** 批量删除：DELETE /api/agent/sessions，body { ids: number[] }（需登录，逐个校验归属） */
+  @UseGuards(JwtAuthGuard)
+  @Delete('sessions')
+  async deleteSessions(
+    @GetUser('userId') userId: number,
+    @Body() dto: BatchDeleteSessionsDto,
+  ) {
+    return this.agentService.deleteSessions(userId, dto.ids);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Delete('session/:id')
   async deleteSession(

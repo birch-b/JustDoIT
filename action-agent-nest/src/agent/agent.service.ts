@@ -175,6 +175,29 @@ export class AgentService {
     return { success: true };
   }
 
+  /** 批量删除：一次查出归属会话，批量删除 待办→反馈→会话→任务；任一 id 不存在/不归属即拒绝 */
+  async deleteSessions(userId: number, ids: number[]) {
+    const uniqueIds = [...new Set(ids)];
+    const sessions = await this.sessionRepo.find({
+      where: { id: In(uniqueIds) },
+      relations: { task: true },
+    });
+
+    const owned = sessions.filter((s) => s.task && s.task.userId === userId);
+    if (owned.length !== uniqueIds.length) {
+      throw new ForbiddenException('包含无权访问或不存在的会话，已取消删除');
+    }
+
+    const sessionIds = owned.map((s) => s.id);
+    const taskIds = owned.map((s) => s.task.id);
+    await this.todoService.deleteBySessions(sessionIds);
+    await this.recordRepo.delete({ sessionId: In(sessionIds) });
+    await this.sessionRepo.delete(sessionIds);
+    await this.taskRepo.delete(taskIds);
+
+    return { success: true, deleted: sessionIds.length };
+  }
+
   /** 生成建议：优先 DeepSeek LLM（带入历史行为），失败 fallback 到规则计算 */
   private async generateAdvice(dto: CreateSessionDto, historySummary?: string) {
     const llm = await this.llmService.generateAdvice(dto, historySummary);

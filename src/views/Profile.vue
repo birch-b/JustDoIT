@@ -272,7 +272,6 @@ function formatDate(iso: string): string {
             v-model="deleteForm.code"
             class="mt-5"
             :on-send="sendDeleteCode"
-            placeholder="6 位数字，发送至绑定邮箱"
           />
 
           <label class="mt-4 flex items-center gap-3 cursor-pointer select-none">

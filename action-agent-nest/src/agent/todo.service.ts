@@ -1,7 +1,7 @@
 // 待办计划表 CRUD：所有操作均校验归属
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Todo } from './entities/todo.entity';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
@@ -62,6 +62,12 @@ export class TodoService {
   /** 会话删除时，连带删除由该会话加入计划表的待办 */
   async deleteBySession(sessionId: number) {
     await this.todoRepo.delete({ sessionId });
+  }
+
+  /** 批量：按多个会话 id 一次性删除关联待办 */
+  async deleteBySessions(sessionIds: number[]) {
+    if (!sessionIds.length) return;
+    await this.todoRepo.delete({ sessionId: In(sessionIds) });
   }
 
   private async getOwned(userId: number, id: number): Promise<Todo> {
