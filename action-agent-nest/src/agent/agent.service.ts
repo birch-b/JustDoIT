@@ -11,6 +11,8 @@ import { AnswerBookService } from './answerbook.service';
 import { TarotService } from './tarot.service';
 import { TodoService } from './todo.service';
 import { LlmService } from './llm.service';
+import { MemoryService } from '../memory/memory.service';
+import { UserMemory } from '../memory/entities/user-memory.entity';
 
 // 劝说模式文案（规则 fallback 用），key 与前端 PersuadeMode 联合类型完全对齐
 const PERSUADE_TEXTS: Record<string, string> = {
@@ -35,6 +37,7 @@ export class AgentService {
     private readonly tarotService: TarotService,
     private readonly todoService: TodoService,
     private readonly llmService: LlmService,
+    private readonly memoryService: MemoryService,
   ) {}
 
   /** 创建会话：取历史 → 保存任务 → 计算建议 → 神秘加成 → 保存会话 */
@@ -59,17 +62,20 @@ export class AgentService {
     });
     const savedTask = await this.taskRepo.save(task);
 
-    // 2. 调 DeepSeek LLM 生成建议（带入历史行为；失败时 fallback 到规则计算）
-    const advice = await this.generateAdvice(dto, historySummary);
+    // 2. 读取用户长期记忆（3.3），与历史摘要一起喂给 LLM；无记忆时为空串、不影响原流程
+    const memoryText = await this.buildMemoryText(userId);
+
+    // 3. 调 DeepSeek LLM 生成建议（带入历史行为 + 长期记忆；失败时 fallback 到规则计算）
+    const advice = await this.generateAdvice(dto, historySummary, memoryText);
     const { agentSuggestIndex, conclusion, persuadeMode, persuadeText, minAction } = advice;
 
-    // 3. 神秘加成：答案之书
+    // 4. 神秘加成：答案之书
     let answerBook: string | null = null;
     if (dto.enableAnswerBook !== false) {
       answerBook = await this.answerBookService.ask(dto.taskContent);
     }
 
-    // 4. 神秘加成：塔罗牌（第三方失败时本地随机兜底）
+    // 5. 神秘加成：塔罗牌（第三方失败时本地随机兜底）
     let tarotCards: string[] | undefined;
     if (dto.enableTarot) {
       const result = await this.tarotService.draw(5);
@@ -81,7 +87,7 @@ export class AgentService {
       }
     }
 
-    // 5. 保存会话（historySummary 在读取时动态生成，不存固定值）
+    // 6. 保存会话（historySummary 在读取时动态生成，不存固定值）
     const session = this.sessionRepo.create({
       taskId: savedTask.id,
       agentSuggestIndex,
@@ -198,13 +204,36 @@ export class AgentService {
     return { success: true, deleted: sessionIds.length };
   }
 
-  /** 生成建议：优先 DeepSeek LLM（带入历史行为），失败 fallback 到规则计算 */
-  private async generateAdvice(dto: CreateSessionDto, historySummary?: string) {
-    const llm = await this.llmService.generateAdvice(dto, historySummary);
+  /** 生成建议：优先 DeepSeek LLM（带入历史行为 + 长期记忆），失败 fallback 到规则计算 */
+  private async generateAdvice(
+    dto: CreateSessionDto,
+    historySummary?: string,
+    memoryText?: string,
+  ) {
+    const llm = await this.llmService.generateAdvice(dto, historySummary, memoryText);
     if (llm) {
       return llm;
     }
     return this.computeAdviceByRule(dto);
+  }
+
+  /**
+   * 读取用户长期记忆并格式化为 Prompt 文本（3.3）。
+   * 按置信度倒序取 top10，每行一条 "- {content}"；无记忆返回空串。
+   * MySQL decimal 经驱动返回可能是 string，统一 Number 化再排序。
+   */
+  private async buildMemoryText(userId: number): Promise<string> {
+    const memories = await this.memoryService.list(userId);
+    if (!memories.length) return '';
+    return this.formatMemoryText(memories);
+  }
+
+  /** 纯函数：记忆实体列表 → Prompt 片段（与 buildMemoryText 分开，方便后续 3.4/3.5 复用） */
+  private formatMemoryText(memories: UserMemory[]): string {
+    const top = [...memories]
+      .sort((a, b) => Number(b.confidence) - Number(a.confidence))
+      .slice(0, 10);
+    return top.map((m) => `- ${m.content}`).join('\n');
   }
 
   /** 规则兜底：LLM 不可用时使用（保留原规则逻辑） */

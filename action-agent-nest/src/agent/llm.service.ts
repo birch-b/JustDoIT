@@ -17,12 +17,16 @@ export class LlmService {
   private readonly model = process.env.LLM_MODEL || 'deepseek-chat';
 
   /** 调 DeepSeek 生成决策建议；key 未配置或调用失败返回 null（由 AgentService fallback） */
-  async generateAdvice(dto: CreateSessionDto, historySummary?: string): Promise<LlmAdvice | null> {
+  async generateAdvice(
+    dto: CreateSessionDto,
+    historySummary?: string,
+    memoryText?: string,
+  ): Promise<LlmAdvice | null> {
     if (!this.apiKey || this.apiKey.includes('你的key')) {
       this.logger.warn('LLM_API_KEY 未配置或仍为占位符，跳过 LLM 调用');
       return null;
     }
-    const messages = buildPrompt(dto, historySummary);
+    const messages = buildPrompt(dto, historySummary, memoryText);
     try {
       const resp = await fetch(`${this.baseUrl}/v1/chat/completions`, {
         method: 'POST',

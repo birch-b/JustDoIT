@@ -30,11 +30,16 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 /**
- * 组装 DeepSeek 调用消息：system 给定角色与输出契约，user 给定任务信息 + 用户历史行为。
+ * 组装 DeepSeek 调用消息：system 给定角色与输出契约，user 给定任务信息 + 长期记忆 + 用户历史行为。
  * 要求模型严格返回 JSON，字段对齐 AgentSessionRes 的核心五项。
  * historySummary 为该用户真实历史统计（第二步），无历史时不传。
+ * memoryText 为该用户长期记忆片段（第三步 3.3），无记忆时不传。
  */
-export function buildPrompt(dto: CreateSessionDto, historySummary?: string): LlmMessage[] {
+export function buildPrompt(
+  dto: CreateSessionDto,
+  historySummary?: string,
+  memoryText?: string,
+): LlmMessage[] {
   const categoryLabel = CATEGORY_LABEL[dto.category] ?? dto.category;
   const taskLines = [
     `任务：${dto.taskContent}`,
@@ -46,6 +51,11 @@ export function buildPrompt(dto: CreateSessionDto, historySummary?: string): Llm
     dto.deadline ? `截止日期：${dto.deadline}` : '截止日期：无',
     dto.location ? `地点：${dto.location}` : '地点：未指定',
   ];
+
+  // 第三步 3.3：长期记忆（提炼后的用户画像/偏好/规律），放在历史摘要之前，先立画像再看数据
+  if (memoryText && memoryText.trim()) {
+    taskLines.push('', '【用户长期记忆】', memoryText);
+  }
 
   // 第二步：把真实历史行为喂给模型，让建议个性化（不是 Memory/人格总结，仅当次上下文）
   if (historySummary && historySummary.trim()) {
@@ -81,6 +91,10 @@ export function buildPrompt(dto: CreateSessionDto, historySummary?: string): Llm
 7. 如果用户消息中提供了【用户历史行为】，必须结合其真实行为模式给出更有针对性的建议：
    例如历史显示其"常接受建议却没有真正执行"，就在 persuadeText 里点破这一规律，并把 minAction 压到更小、更不可能拖延（如"只打开文档/只看第一个知识点"）；
    历史执行率低时少讲大道理、强执行率高时可直接推动。只能依据给出的历史内容，严禁臆造或脑补用户没有提供的过往经历。
+8. 如果用户消息中提供了【用户长期记忆】，请把它作为辅助参考用于个性化措辞与策略，但必须注意：
+   长期记忆是基于历史行为的推断，不是绝对事实，不能因为单条记忆就武断给用户贴标签或预判结果。
+   必须结合本次任务的意愿、精力、重要度、耗时，以及历史行为综合判断。
+   例如记忆"面对长任务执行率低"，而本次是一个 30 分钟、高意愿、高精力的任务，就不应据此判定用户不会执行。
 
 必须严格返回 JSON，格式如下：
 {

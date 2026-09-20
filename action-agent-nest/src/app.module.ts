@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserModule } from './user/user.module';
 import { JwtStrategy } from './common/strategies/jwt.strategy';
 import { AgentModule } from './agent/agent.module';
+import { MemoryModule } from './memory/memory.module';
 // 加载自定义配置文件
 import configuration from './config/configuration';
 
@@ -36,7 +37,9 @@ import configuration from './config/configuration';
 
     UserModule,
 
-    AgentModule
+    AgentModule,
+
+    MemoryModule
   ],
   providers: [JwtStrategy],
 })
