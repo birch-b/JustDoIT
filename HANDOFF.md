@@ -1,6 +1,6 @@
 # HANDOFF - JUST DO IT（今日行动师）交接文档
 
-> 更新时间：2026-09-19
+> 更新时间：2026-09-24
 
 决策辅助应用：帮助纠结的用户做「做不做」的决定。Vue3 前端 + NestJS 后端（**DeepSeek LLM 生成行动建议** + 答案之书/塔罗牌第三方 API）。
 
@@ -25,7 +25,22 @@
 
 2026-09-18 **第一步 DeepSeek LLM 接入**（commit `6900a5d` 已推送）：规则判断 → LLM 判断，前端零改动；劝说模式 4→3；统计页图表改 lieflat glance 风格。
 
-2026-09-19 **第二步：把历史行为喂给 LLM（本地改动待提交）**：`createSession` 在保存本次任务前先算 `buildHistorySummary`，注入 user prompt 的【用户历史行为】段；并把摘要从"次数/执行率"增强为**跨维度行为规律**（方案 B）。实测 LLM 已能引用真实执行率做个性化激将（如"5 个任务只完成 1 次，25% 执行率"）。**未引入 Memory/向量库/RAG**。详见下文「LLM 建议链路」。
+2026-09-19 **第二步：把历史行为喂给 LLM**（commit `91caa89`）：`createSession` 在保存本次任务前先算 `buildHistorySummary`，注入 user prompt 的【用户历史行为】段；并把摘要从"次数/执行率"增强为**跨维度行为规律**（方案 B）。实测 LLM 已能引用真实执行率做个性化激将（如"5 个任务只完成 1 次，25% 执行率"）。**未引入向量库/RAG**。详见下文「LLM 建议链路」。
+
+2026-09-21~22 **第三步：用户长期记忆 Memory（3.1-3.5 全部完成）**：
+- **3.1-3.3 已提交推送**（commit `9f50839`）：`user_memory` 表 + MemoryModule/Service/Controller（`/api/memory` CRUD，JWT + 归属校验）+ 记忆注入 DeepSeek Prompt
+- **3.4 行为反馈更新记忆 + 3.5 LLM 自动提炼偏好已完成**（本地改动待提交），含方案 A 时间窗口放弃判定；未引入 RAG/Embedding/向量库/多 Agent，接口兼容
+- 详见下文「Memory 模块」
+
+2026-09-23 **登录滑动过期**（前端本地改动待提交）：连续 24 小时未进入系统自动清除登录态踢回登录页；详见下文「前端数据层」。
+
+2026-09-24 **反馈二次对话 + 补充条件 + 关键词汇总**（本地改动待提交）：
+- 反馈区支持**可选评论**；用户点接受/拒绝（+ 是否入计划表 + 评论）打包后，后端**第二次调用 DeepSeek** 生成一句 Agent 回应，评论与回应均持久化；这是纯聊天回应，**不触发任何记忆更新**（一个会话仍只在反馈时更新一次记忆）
+- 任务可填**补充条件**（extraContext，一句话描述不全时的背景/约束，留空为空，prompt 有填写才注入）
+- 接受建议不再自动入计划表，改为先询问（吃饭/出门这类即时决定可不入表）
+- 原生 window.confirm 全部换成手绘风 `SketchConfirmDialog`（单条/批量删除）
+- 统计页顶部新增「关于你的关键词」卡（读 `/api/memory`，置信度 top8）；气泡点改手绘不规则墨圈
+- 3.5 提炼的行为流水带上用户评论（弱辅助证据，≥3 次同向才可用；**agentReply 绝不回灌**防自我强化）
 
 | 模块 | 状态 |
 |---|---|
@@ -36,6 +51,7 @@
 | 答案之书 / 塔罗牌（单张） | ✅ 第三方真实接口，失败本地兜底 |
 | 统计页（前端基于会话列表计算，lieflat 风纯 SVG 图表） | ✅ |
 | **DeepSeek LLM 大模型建议** | ✅ **已接入**：LLM 生成指数/结论/劝说/最小行动，失败自动降级规则引擎 |
+| **用户长期记忆 Memory（第三步）** | ✅ 表 + CRUD + Prompt 注入 + 行为反馈更新（3.4）+ LLM 提炼（3.5） |
 
 ⚠️ 后端需要时在 `action-agent-nest` 目录执行 `npm run start:dev`（端口 3000）。
 
@@ -53,7 +69,7 @@
 | GET | `/agent/sessions` | 当前用户历史列表（含 task + record，动态 historySummary） |
 | GET | `/agent/session/:id` | 会话详情（校验归属） |
 | GET | `/agent/history/:id` | 历史详情（会话 + 任务输入 + 反馈 + 时间） |
-| POST | `/agent/action/record` | 行为反馈 **upsert**（按 sessionId，校验归属） |
+| POST | `/agent/action/record` | 行为反馈 **upsert**（按 sessionId，校验归属）；`withReply:true` 时同步二次调 LLM 生成 Agent 回应（见下） |
 | DELETE | `/agent/session/:id` | 删除会话：级联删 关联待办 → 反馈 → 会话 → 任务 |
 | GET | `/agent/answer-book` | 公开，答案之书（uapis.cn） |
 | POST | `/agent/tarot` | 公开，塔罗抽 1 张（妖狐 API，后端另有本地兜底牌面） |
@@ -81,6 +97,12 @@
   3. **跨维度行为规律（top3，新增）**：意愿(≥7 vs ≤4)、精力(≥7 vs ≤4)、重要度(≥8 vs ≤4)、预计耗时(≥60min vs <60min) 各自的执行率对比；以及"接受 ≥3 次但 ≥2 次没执行"
      - 防噪声：每组样本 ≥2、执行率差 ≥25 个百分点才算显著，按差异排序只留 top3，小样本维度直接跳过
   - 每次读取实时计算，不入库；前端 SessionResult「历史真实行为摘要」直接展示同一段
+- **补充条件 extraContext（2026-09-24）**：task 表加 `extraContext varchar(500) default ''`（synchronize 自动加列，存量任务默认空）；DTO 可选 ≤500 字，service 存前 trim。`buildUserPrompt` **有填写才注入**「补充条件：xxx」行，空值时 prompt 完全不出现该字段
+- **反馈二次对话（2026-09-24）**：action_record 加两列 `feedbackComment` / `agentReply`（均 varchar(500) 可空）；ActionRecordDto 加 `comment?`（用户可选评论）/ `addToTodo?` / `withReply?`
+  - 只有 `withReply:true`（用户点接受/拒绝那次反馈）才触发；计划表勾选执行的回写不带该标记，**不触发二次回复、不覆盖原评论**
+  - `buildFeedbackReplyPrompt(ctx)`（agent.prompt.ts）：把 原建议（结论/模式/文案/最小行动）+ 用户态度 + 是否入计划表 + 评论打包，system 要求按原劝说模式口吻给 30~60 字一句话；接受+入表提醒按最小行动起步、接受+不入表（即时决定）祝福不提计划、拒绝则尊重不纠缠；不返回 JSON
+  - `llm.service.ts` 新增通用纯文本对话 `chatText(messages, temperature)`（不强制 json_object，空白压平、截断 500 字，失败 null）；LLM 不可用时 service 按 接受/拒绝×入表 三种本地兜底文案
+  - **关键边界：二次回复是纯聊天，不写记忆**；且 agentReply 永不进入任何记忆提炼输入（防模型自我强化）
 - 所有查询带归属校验，越权抛 `ForbiddenException`
 
 **Todo 模块**（`src/agent/todo.controller.ts` / `todo.service.ts`，`/todos` 全部需 JWT）：
@@ -102,32 +124,55 @@
 
 - `verify-code.service.ts`：内存 Map 存储，三类码（register/reset/delete）互不通用；5 分钟有效、60 秒发送频控、校验成功即焚
 - `mail.service.ts`：QQ 邮箱 SMTP（`QQ_MAIL_USER` / `QQ_MAIL_AUTH_CODE`）
-- 5 张表：task、task_session、action_record、todo、user（`synchronize: true` 自动建表）
+
+**Memory 模块**（`src/memory/`，第三步，`/memory` 全部需 JWT + userId 归属校验）：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/memory` | 当前用户全部记忆（updatedAt 倒序） |
+| POST | `/memory` | 手动新增（memoryType 白名单 + content 长度校验） |
+| PATCH | `/memory/:id` | 修改（校验归属） |
+| DELETE | `/memory/:id` | 删除（校验归属） |
+
+- **3.1 表**：`user_memory`（id / user_id / memory_type / content / confidence 0~1 / created_at / updated_at / **memory_key 可空**——3.5 LLM 受管记忆的 upsert 键）
+- **3.3 注入 Prompt**：`createSession` 时把用户长期记忆注入 user prompt【用户长期记忆】段；system 第 8 条约束「记忆是历史推断不是绝对事实，仅供参考，不得武断贴标签」
+- **3.4 行为反馈更新记忆**（`behavior-memory.service.ts`，规则引擎零 LLM）：`submitRecord` 保存反馈后同步调 `syncFromFeedback(userId, category)`——重算该类别统计 → 增/改/翻转/回收该类别的**受管模板记忆**（接受倾向 behavior + 执行倾向 pattern，正反文案各一），其他记忆一律不动。阈值：单类别样本 ≥3 才成结论；接受/执行率 ≥0.7 或 ≤0.3 触发；接受满 10 次或执行满 6 次直接拉满 confidence 0.95；confidence 0~1 随样本双向增减
+  - **方案 A 放弃判定**：isExecute=false 区分不出"没开始"与"放弃"——有 deadline 按 deadline+2 天、否则按反馈记录创建后 7 天；窗口内视为待执行（不进执行率分母），超期视为放弃（计入负面）
+  - `deleteSession`/`deleteSessions` 删除后按类别重算，防记忆残留
+- **3.5 LLM 自动提炼偏好**（`llm-memory.service.ts` + `memory-insight.prompt.ts`）：反馈写入后异步触发（fire-and-forget 不阻塞接口），内存节流 10 分钟；行为流水 <5 条跳过（防过度推断，日志已区分"样本不足未调 LLM"与"LLM 真空返回"）。聚合最近 50 会话+反馈 → DeepSeek 提炼稳定偏好（最多 3 条/次；prompt 要求 ≥3 次同向证据、宁缺毋滥、复用已有 key、受管记忆禁止重复输出）。输出硬校验：key snake_case 规范 / memoryType 白名单 / value ≤200 / confidence 钳 0~1 / 同 key 去重；与已有记忆字符 bigram Dice ≥0.6 丢弃（防语义重复）；按 memory_key upsert；存量上限 12 条超限回收最旧。任何失败只记日志不影响主流程
+  - **评论入流水（2026-09-24）**：行为行末尾有评论时追加 `留言:xxx`（截断 60 字），同一次提炼调用送出、零额外成本；prompt 第 8 条规定留言只是**弱辅助证据**（解释原因/处境/约束），严禁凭单条留言下结论，须 ≥3 次同向行为或多条同向留言互证；**只附 feedbackComment，绝不附 agentReply**
+- `llm.module.ts`：共享 LlmService 的独立模块（解 MemoryModule↔AgentModule 循环依赖）；`llm.service.ts` 抽出通用 `chatJson(messages, temperature)`（json_object，失败返回 null）
+
+- 6 张表：task、task_session、action_record、todo、user、user_memory（`synchronize: true` 自动建表）
+  - 2026-09-24 加列（自动迁移）：`task.extra_context varchar(500) default ''`；`action_record.feedback_comment` / `action_record.agent_reply` 均 varchar(500) nullable
 
 ### 前端（Vue3）
 
 **数据层**：
 
 - `src/api/http.ts`：`authRequest` 统一封装——自动带 Bearer token、401 抛 `UnauthorizedError`、后端 `message`（含 ValidationPipe 数组）透传
-- `src/api/`：`agentApi.ts` / `todoApi.ts` / `userApi.ts` 全部走真实后端；`toCardItem()` 把 HistoryDetail 映射成首页卡片
-- `agentStore`：纯后端数据源，**mock 会话和 demo 数据已删除**；缓存会话列表，反馈/删除同步更新缓存
+- `src/api/`：`agentApi.ts` / `todoApi.ts` / `userApi.ts` 全部走真实后端；`toCardItem()` 把 HistoryDetail 映射成首页卡片；`memoryApi.ts`（2026-09-24）`getMemories()` 读 `/api/memory` 供统计页关键词卡使用
+- `agentStore`：纯后端数据源，**mock 会话和 demo 数据已删除**；缓存会话列表，反馈/删除同步更新缓存。`submitRecord` 透传 `comment/addToTodo/withReply`，返回的 record 含 `feedbackComment/agentReply`（失败返回 undefined，由页面提示重试）
 - `todoStore`：数据源后端 MySQL；首次登录把旧版 localStorage（`jdi_todos`）待办按 sessionId/内容去重**一次性迁移**后删除本地 key
   - `toggleDone`：乐观更新 → PATCH 后端 → 失败回滚；带 sessionId 的待办同时 upsert `ActionRecord.isExecute`，**「接受→执行」链路已打通**
-- `userStore`：JWT + user 存 `jdi_current_user`；init 兼容旧 mock 格式（无 token 视为失效）；退出登录同时清空 agent/todo 内存数据
-- 路由守卫：`requiresAuth` 未登录带 `?redirect=` 跳登录页；已登录访问登录/注册/找回密码跳个人中心；`/history/:id` 永久重定向到 `/session/:id`
+- `userStore`：JWT + user + `lastActiveAt` 存 `jdi_current_user`；init 兼容旧 mock 格式（无 token 视为失效）；**登录滑动过期（2026-09-23）**——连续 24 小时未进入系统自动清除登录态，每次路由跳转 `checkActivity()` 检查：未超时刷新活跃时间戳续期，超时登出踢回登录页（旧缓存无时间戳视为过期）；退出登录同时清空 agent/todo 内存数据
+- 路由守卫：每次跳转先过滑动过期检查；`requiresAuth` 未登录/过期带 `?redirect=` 跳登录页；已登录访问登录/注册/找回密码跳个人中心；`/history/:id` 永久重定向到 `/session/:id`
 
 **页面/组件**（`src/views/`、`src/components/`）：
 
-- `TaskCreate.vue`：分类按钮组 + 三滑块 + 可选耗时/截止/地点；答案之书（默认开）、塔罗（默认关，单张）两个整行可点开关；提交真实接口
-- `SessionResult.vue`：**会话页与历史详情已合并为统一页**（原 `HistoryDetail.vue` 已删除）；时钟/结论/神谕/单张塔罗/原始任务输入/最小行动/动态历史摘要；反馈仅「✓ 我接受 / ✕ 我拒绝」，接受自动入计划表；已反馈可「重新加入计划表」；右上角可删除整条记录（confirm 二次确认）
-- `Dashboard.vue`：计划表勾选/删除/清除已完成（`X PENDING · Y DONE`）+ 历史卡片
-- `Stats.vue`：总数/执行数/接受率/劝说模式分布/意愿-执行关系，**lieflat glance 风纯 SVG**（零三方图表库），数据来自会话列表前端聚合：
+- `TaskCreate.vue`：分类按钮组 + 三滑块 + 可选耗时/截止/地点；答案之书（默认开）、塔罗（默认关，单张）两个整行可点开关；**补充条件（可选）textarea**（2026-09-24，≤500 字，纯手绘下划线样式，未填写提交空串）；按钮区顶部分隔线已去除（与补充框下划线相邻会被误以为还有输入框）；提交真实接口
+- `SessionResult.vue`：**会话页与历史详情已合并为统一页**（原 `HistoryDetail.vue` 已删除）；时钟/结论/神谕/单张塔罗/原始任务输入（含补充条件回显）/最小行动/动态历史摘要
+  - **反馈区（2026-09-24 重构）**：可选评论 textarea +「✓ 我接受 / ✕ 我拒绝」；点接受**先追问**是否加入计划表（即时决定可不入表），选定后把 态度+是否入表+评论 一次提交（`withReply:true`），回应展示在「Agent 的回应」区块；点拒绝直接提交。历史回看回显「我的留言」与持久化的 Agent 回应；已反馈仍可补「加入计划表」；右上角删除走手绘确认弹窗
+- `Dashboard.vue`：计划表勾选/删除/清除已完成（`X PENDING · Y DONE`）+ 历史卡片；管理模式批量删除走手绘确认弹窗（文案带选中条数）
+- `Stats.vue`：lieflat glance 风纯 SVG（零三方图表库），数据来自会话列表前端聚合：
+  - **「关于你的关键词」卡（2026-09-24 新增，置顶整行）**：读 `/api/memory` 按置信度取 top8，手绘边框标签展示；记忆为空（新用户/样本不足）显示引导文案；整行宽卡片水平 padding 用 3rem（边框 SVG 非等比拉伸，左右边框内缩，见踩坑 23）
+  - 总数/已执行/接受率/劝说模式分布/意愿-执行关系五个板块
   - 接受率卡：20 根手绘刻度（1 tick=5%），达成段薄荷上墨、未达成淡棕短刻度，逐根生长入场
   - 劝说模式分布：单位发丝线（1 竖线=1 次会话，手绘微抖），每 5 根一个点标，最高频模式整行走薄荷色；模式共 **3 种**（前端 `PersuadeMode` / `PERSUADE_MODES` 已同步删除塔罗模式）
-  - 意愿×执行：**Catmull-Rom 平滑曲线图**——x=意愿分 1–10、y=该分数下完成率（只标 0%/100%，单条记录即 0 或 100，多样本后中间值自然出现）；一笔画描边入场 + 薄荷渐变填充；地板保留每次决策的小方框证据点（实心=已执行/空心=未执行）；全部抖动用确定性 hash，刷新图形一致；含 `prefers-reduced-motion` 降级
+  - 意愿×执行：散点气泡已改为**手绘不规则墨圈**（9 锚点半径 ±10% 确定性抖动 + 闭合 Catmull-Rom，比正圆生动、比涂鸦圆整）；实心=已执行/空心=未执行；y 轴各层严格等距（修复 0/1/2 刻度疏密不一）；全部抖动用确定性 hash，刷新一致；含 `prefers-reduced-motion` 降级
 - `Login.vue` / `Register.vue` / `ForgotPassword.vue`（新增）：注册与找回密码均需邮箱验证码，复用 `EmailCodeInput.vue`（60s 倒计时）
 - `Profile.vue`：资料展示/编辑（**仅本地生效，后端无更新接口**）、统计概览、邮箱验证码注销账户
-- 手绘组件库不变：SketchBorder / LinearButton / SketchCheckbox / SketchClock / DecorDotCluster / DualTextBlock / PageWrapper
+- 手绘组件库：SketchBorder / LinearButton / SketchCheckbox / SketchClock / DecorDotCluster / DualTextBlock / PageWrapper；**SketchConfirmDialog（2026-09-24 新增）**：Teleport 到 body 的手绘确认弹窗（奶米底+缠绕边框+Esc/点遮罩取消+loading 锁定+缩放入场动画），全站删除类二次确认统一用它，**不要再用 window.confirm/alert**（alert 仅保留接口失败兜底提示）
 
 ### 已验证
 
@@ -136,6 +181,16 @@
 - 答案之书真实神谕；塔罗真实牌面（带 keywords/description/imageUrl，前端目前仅展示牌名+正逆位）
 - **LLM 链路（2026-09-18）**：真实任务返回动态劝说文案（非内置四句模板）；指数与中英文结论方向一致；**激将模式**用「意愿 2 / 精力 6 / 重要度 9 + 临近截止」配方可稳定触发；LLM 返回非法/超时会静默降级规则文案（后端 warn 日志）
 - **历史个性化（2026-09-19 实测）**：攒 5 个任务（仅完成 1 个）后再建「意愿 4 / 重要度 8 / 30min」任务，LLM 正确选激将模式并引用真实数据——劝说文案出现"5 个任务只完成 1 次，25% 的执行率"，minAction 压到"打开项目，只写一个函数"；证明历史规律确实进入了 prompt 并影响输出
+- **Memory 链路（2026-09-21/22 实测）**：
+  - 3.4：受管记忆 confidence 精确随样本更新；方案 A 双向验证（窗口内 isExecute=false 不进分母，超期未执行正确生成负面"接受建议却没真正执行"）；删除会话后记忆正确重算
+  - 3.5：LLM 实测产出耗时维度偏好（`accept_short_learning_tasks` 0.85 / `reject_high_effort_exercise` 0.72）；健康类「2 拒 1 执行」未被武断成"不爱运动"（防过度推断生效）；与 3.4 受管记忆语义重复的 LLM 输出被 Dice 去重拦截
+  - 3.4/3.5 互不干扰：受管记忆走模板文案即时修正，LLM 只写 memory_key 命名空间
+  - 因果验证法：插入"劝说必须以『行动家，』开头"的记忆后，LLM 劝说文案确实以「行动家，」开头，证明记忆进入了 prompt
+- **登录滑动过期（2026-09-23）**：vue-tsc 通过；旧缓存无时间戳视为过期，刷新页面要求重新登录（待浏览器实测）
+- **二次对话/补充条件/关键词（2026-09-24 E2E 实测）**：
+  - 接受+入表+评论「可以，我就这么干」→ Agent 回复引用了该任务最小行动（"先打开项目文件夹列出顶层目录"）；拒绝无评论 → 回复尊重决定不纠缠；两条路径 record 均正确持久化 feedbackComment/agentReply
+  - e2e_m35（14 条反馈）提交带评论反馈后，3.5 异步提炼正常按 key 更新记忆，评论出现在行为流水中且无异常新记忆；记忆/关键词卡读取 `/api/memory` 正常
+  - 前后端 tsc/vue-tsc 通过；synchronize 自动加列 task.extra_context、action_record.feedback_comment/agent_reply
 
 ---
 
@@ -152,15 +207,16 @@
 ## 四、下一步计划（按优先级）
 
 **第一步（规则 → DeepSeek）已完成 ✅**（commit `6900a5d`）。
-**第二步（当前任务 + 历史行为 → DeepSeek）已完成 ✅**（2026-09-19，待提交），含方案 B 跨维度规律；全程未动前端数据契约、未引入 Memory/RAG。接下来：
+**第二步（当前任务 + 历史行为 → DeepSeek）已完成 ✅**（commit `91caa89`），含方案 B 跨维度规律。
+**第三步（Memory 用户长期记忆）已完成 ✅**（3.1-3.3 commit `9f50839`；3.4+3.5、登录滑动过期及 2026-09-24 二次对话/补充条件/关键词卡均已完成、本地待提交）。接下来：
 
-1. **第三步：显式用户偏好 → Memory**——新增持久化的用户偏好/画像（可由规则或简单提取写入），跨会话长期记住稳定特征（如"长期低意愿高重要度""总在周末执行"）。届时才需要新表，仍可不做 embedding
-2. **第四步：LLM 自动提取偏好写回 Memory**——在反馈/会话后让模型抽取稳定偏好入库
-3. 后端补用户资料更新接口（username/email/bio），前端 `updateProfile` 改为真实调用
-4. （可选）统计聚合接口，避免前端拉全量会话
-5. 塔罗结果页展示关键词/解读/牌面图（后端数据已返回，前端未用）
-6. 验证码存储替换为 Redis/DB（部署前必做）
-7. 更后阶段才考虑：RAG / 向量数据库 / Embedding / MCP / 多 Agent / 多轮对话（第二步明确不做，第三、四步也暂不需要）
+1. **提交当前本地改动**（3.4/3.5 + 滑动过期 + 二次对话 + 补充条件 + 手绘确认弹窗 + 关键词卡/墨圈）
+2. 后端补用户资料更新接口（username/email/bio），前端 `updateProfile` 改为真实调用
+3. （可选）统计聚合接口，避免前端拉全量会话
+4. 塔罗结果页展示关键词/解读/牌面图（后端数据已返回，前端未用）
+5. 验证码存储替换为 Redis/DB（部署前必做）
+6. Memory 完整管理页（统计页关键词卡已是只读入口；可再做增删改）
+7. 更后阶段才考虑：RAG / 向量数据库 / Embedding / MCP / 多 Agent / 多轮对话（第三步已用规则引擎+轻量 LLM 提炼覆盖，暂不需要）
 
 ---
 
@@ -182,6 +238,15 @@
 14. **LLM 输出的指数和结论会打架**：模型可能给出「暂缓」结论却打 55 分，导致前端英文（指数≥50 显示 GO FOR IT NOW）与中文「暂缓」矛盾。解法：prompt 让模型额外输出 `shouldGo` 布尔，后端不信任它打的分，强制对齐到 ≥55 / ≤45
 15. **DeepSeek 默认不爱用「激将」**：只给模式名不给判定标准时，模型几乎总走温和路线，激将很难触发。必须在 system prompt 写清每种模式对应的「心理阻力类型」+ 数值信号（意愿≤4 且重要度≥7），并明确要求三模式频率均衡
 16. **塔罗模式曾经身兼两职**：旧规则里开塔罗就把 persuadeMode 设成「塔罗模式」，但塔罗本质是附加神谕。已把劝说模式收敛为 3 种（温柔/激将/理性），前后端类型同步删除；因数据库已清空，历史无旧值要迁移
+17. **TypeORM 加列再回滚（ER_DROP_INDEX_FK）**：给已有表加唯一索引列（memory_key）后回滚实体时，synchronize 想删唯一索引被外键阻塞、服务起不来 → 手动按「删外键 → 删索引 → 删列 → 重建外键」SQL 清理
+18. **`isolatedModules` 下装饰器类型导入（TS1272）**：entity 里用枚举类型（如 `MemoryType`）做字段类型注解会编译报错 → 字段类型改 `string`，枚举只在运行时校验用
+19. **3.5 节流占位**：`maybeExtractFromBehavior` 先占位再执行，样本不足也占坑 → 同轮 E2E 后续触发全被跳过；测试前重启服务重置内存 Map
+20. **LLM 重复记忆退化**：LLM 可能用新 key 输出与 3.4 受管记忆语义重复的内容 → prompt 标注（系统受管）+ 服务端 Dice ≥0.6 去重双重兜底
+21. **E2E 测试基建**：注册需邮箱验证码，用 node 脚本直插 DB 造测试账号；PowerShell 经请求发中文会变 `?`，含中文的 E2E 一律用 node fetch；`actualCostMin` 是 DTO 必传整数
+22. **PowerShell 陷阱补充**：`&&` 不被支持（改 `;`）、commit 消息不能用 heredoc（改多个 `-m`）
+23. **SketchBorder 宽卡片边框内缩压线**：边框 SVG 用 `preserveAspectRatio="none"` 随容器非等比拉伸，viewBox 中距边 6~12 单位的描边在**整行宽卡片**上被拉到距边缘约 40px，常规 1.5~2rem padding 的文字会压在线上；窄卡（1/3 行宽）无此问题。解法：宽卡片 padding 用 `2rem 3rem` 加大水平内边距（根治需改 SVG 用 vector-effect 或百分比路径，暂不做）
+24. **浏览器原生 confirm/alert 风格割裂**：原生弹窗是系统蓝白样式，与手绘风严重不搭且无法定制 → 新增 SketchConfirmDialog 统一替换 confirm；alert 目前仅在接口异常兜底时保留
+25. **散点图 y 轴刻度必须与层距同源**：曾为给底层圆点留半径导致 0→1 层距（10.2px）与 1→2（18px）不等，刻度列看起来对不齐；改为从基线起每层等距，圆心压在各自导轨线上
 
 ---
 
@@ -212,6 +277,10 @@ irm "http://localhost:3000/api/agent/tarot" -Method Post -ContentType "applicati
 # 测试受保护接口（先登录拿 token）
 $h = @{ Authorization = "Bearer <token>" }
 irm "http://localhost:3000/api/agent/sessions" -Headers $h
+irm "http://localhost:3000/api/memory" -Headers $h          # 用户长期记忆列表
+
+# E2E 测试账号（保留在库中，密码均为 Test123456）：e2e_m35 / e2e_m35b / e2e_m35c
+# 3.5 提炼有 10 分钟内存节流，连续测试需重启后端重置节流 Map
 
 # Git（前后端同一个仓库，在根目录操作）
 git status

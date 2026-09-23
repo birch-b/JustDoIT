@@ -71,8 +71,10 @@ const router = createRouter({
 router.beforeEach((to) => {
   const userStore = useUserStore();
   if (!userStore.currentUser) userStore.init();
-  if (to.meta.requiresAuth && !userStore.isLoggedIn) {
-    // 未登录：带 redirect 回跳地址跳登录页，登录后原路返回
+  // 滑动过期：超过 24 小时未活跃则登出，否则刷新活跃时间戳
+  const loggedIn = userStore.checkActivity();
+  if (to.meta.requiresAuth && !loggedIn) {
+    // 未登录/登录过期：带 redirect 回跳地址跳登录页，登录后原路返回
     return { name: "login", query: { redirect: to.fullPath } };
   }
   // 已登录用户访问登录/注册/找回密码页，跳转到个人中心

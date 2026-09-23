@@ -33,6 +33,10 @@ export class UserMemory {
   @Column({ type: 'varchar', length: 500 })
   content: string;
 
+  /** 3.5 LLM 提炼记忆的稳定键（snake_case，如 preferred_min_action），按此 upsert；手动/3.4 受管记忆为 null */
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  memoryKey: string | null;
+
   /** 置信度 0.00-1.00，反映该记忆可信程度，随行为更新动态调整 */
   @Column({ type: 'decimal', precision: 3, scale: 2, default: 0.5 })
   confidence: number;

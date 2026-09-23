@@ -7,7 +7,7 @@ import { AgentService } from './agent.service';
 import { TodoService } from './todo.service';
 import { AnswerBookService } from './answerbook.service';
 import { TarotService } from './tarot.service';
-import { LlmService } from './llm.service';
+import { LlmModule } from './llm.module';
 import { MemoryModule } from '../memory/memory.module';
 import { Task } from './entities/task.entity';
 import { TaskSession } from './entities/task-session.entity';
@@ -21,8 +21,10 @@ import { Todo } from './entities/todo.entity';
     TypeOrmModule.forFeature([Task, TaskSession, ActionRecord, Todo]),
     // 3.3：AgentService 注入 MemoryService，创建会话时读取用户长期记忆
     MemoryModule,
+    // LlmService 移入共享 LlmModule（3.5 MemoryModule 也要用）
+    LlmModule,
   ],
   controllers: [AgentController, TodoController],
-  providers: [AgentService, TodoService, AnswerBookService, TarotService, LlmService],
+  providers: [AgentService, TodoService, AnswerBookService, TarotService],
 })
 export class AgentModule {}

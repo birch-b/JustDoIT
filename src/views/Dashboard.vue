@@ -12,6 +12,7 @@ import SketchCheckbox from "@/components/sketch/SketchCheckbox.vue";
 import SketchChip from "@/components/sketch/SketchChip.vue";
 import DualTextBlock from "@/components/sketch/DualTextBlock.vue";
 import DecorDotCluster from "@/components/sketch/DecorDotCluster.vue";
+import SketchConfirmDialog from "@/components/sketch/SketchConfirmDialog.vue";
 import { useTodoStore } from "@/store/todoStore";
 
 const router = useRouter();
@@ -95,20 +96,22 @@ function toggleSelectAll() {
 }
 async function batchDelete() {
   if (deleting.value || !selectedIds.value.length) return;
-  const n = selectedIds.value.length;
-  if (
-    !window.confirm(
-      `确定删除选中的 ${n} 条决策记录吗？任务输入、Agent 建议、反馈以及由它们加入计划表的待办将一并删除，且不可恢复。`,
-    )
-  )
-    return;
+  confirmOpen.value = true;
+}
+
+// 批量删除确认弹窗
+const confirmOpen = ref(false);
+async function doBatchDelete() {
+  if (deleting.value || !selectedIds.value.length) return;
   deleting.value = true;
   try {
     await store.batchDeleteSessions([...selectedIds.value]);
     // 关联待办可能已被后端清理，同步计划表
     if (isLoggedIn.value) await todoStore.loadTodos();
+    confirmOpen.value = false;
     exitSelect();
   } catch (e) {
+    confirmOpen.value = false;
     window.alert((e as Error).message || "删除失败，请稍后再试");
   } finally {
     deleting.value = false;
@@ -405,5 +408,17 @@ function goLogin() {
         </component>
       </div>
     </section>
+
+    <!-- 批量删除确认：手绘风弹窗 -->
+    <SketchConfirmDialog
+      :open="confirmOpen"
+      title="批量删除决策记录"
+      en-title="DELETE RECORDS"
+      :message="`确定删除选中的 ${selectedIds.length} 条决策记录吗？任务输入、Agent 建议、反馈以及由它们加入计划表的待办将一并删除，且不可恢复。`"
+      confirm-text="确认删除"
+      :loading="deleting"
+      @confirm="doBatchDelete"
+      @cancel="confirmOpen = false"
+    />
   </PageWrapper>
 </template>

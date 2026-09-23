@@ -39,6 +39,14 @@ export class ActionRecord {
   @Column({ type: 'text', nullable: true })
   executeResult: string;
 
+  /** 用户对本次建议的可选评论/想说的话（反馈时填写，可空） */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  feedbackComment: string | null;
+
+  /** Agent 收到用户决定（接受/拒绝/是否入计划表/评论）后的二次回复（可空） */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  agentReply: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

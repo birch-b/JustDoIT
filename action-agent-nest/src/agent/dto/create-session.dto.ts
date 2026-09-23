@@ -62,4 +62,10 @@ export class CreateSessionDto {
   @IsOptional()
   @IsBoolean()
   enableAnswerBook?: boolean;
+
+  /** 补充条件（可选：一句话描述不全时补充背景/约束，空字符串视为无补充） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  extraContext?: string;
 }

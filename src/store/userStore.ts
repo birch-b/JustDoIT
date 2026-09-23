@@ -15,15 +15,19 @@ export interface UserInfo {
 interface State {
   currentUser: UserInfo | null;
   token: string | null;
+  lastActiveAt: number; // 最近一次活跃时间戳（毫秒），滑动过期依据
 }
 
 const CURRENT_KEY = "jdi_current_user";
 const DEFAULT_BIO = "这个人很懒，什么都没留下。";
+/** 登录滑动过期时长：连续 24 小时未进入系统则登录过期，需重新登录 */
+const IDLE_EXPIRE_MS = 24 * 60 * 60 * 1000;
 
 export const useUserStore = defineStore("user", {
   state: (): State => ({
     currentUser: null,
     token: null,
+    lastActiveAt: 0,
   }),
 
   getters: {
@@ -38,20 +42,65 @@ export const useUserStore = defineStore("user", {
       try {
         const raw = localStorage.getItem(CURRENT_KEY);
         if (!raw) return;
-        const parsed = JSON.parse(raw) as { token?: string; user?: UserInfo } | UserInfo;
+        const parsed = JSON.parse(raw) as {
+          token?: string;
+          user?: UserInfo;
+          lastActiveAt?: number;
+        } | UserInfo;
         if ("token" in parsed && parsed.token) {
+          const lastActiveAt =
+            typeof parsed.lastActiveAt === "number" ? parsed.lastActiveAt : 0;
+          // 超过 24 小时未活跃（或旧数据无时间戳）：登录已过期，清除本地登录态
+          if (Date.now() - lastActiveAt > IDLE_EXPIRE_MS) {
+            this.clearAuth();
+            return;
+          }
           this.token = parsed.token;
           this.currentUser = parsed.user ?? null;
+          this.lastActiveAt = lastActiveAt;
         } else {
           // 旧格式：直接是 user 对象（无 token，视为失效需重新登录）
-          this.currentUser = null;
-          this.token = null;
-          localStorage.removeItem(CURRENT_KEY);
+          this.clearAuth();
         }
       } catch {
-        this.currentUser = null;
-        this.token = null;
+        this.clearAuth();
       }
+    },
+
+    /** 清除本地登录态（不重置业务数据） */
+    clearAuth() {
+      this.currentUser = null;
+      this.token = null;
+      this.lastActiveAt = 0;
+      localStorage.removeItem(CURRENT_KEY);
+    },
+
+    /** 将当前登录态持久化到 localStorage */
+    persistAuth() {
+      if (!this.token || !this.currentUser) return;
+      localStorage.setItem(
+        CURRENT_KEY,
+        JSON.stringify({
+          token: this.token,
+          user: this.currentUser,
+          lastActiveAt: this.lastActiveAt,
+        }),
+      );
+    },
+
+    /**
+     * 路由跳转时调用：超过 24 小时未活跃则登出（踢回登录页），
+     * 否则刷新活跃时间戳实现滑动过期。返回当前是否仍处于登录态。
+     */
+    checkActivity(): boolean {
+      if (!this.isLoggedIn) return false;
+      if (Date.now() - this.lastActiveAt > IDLE_EXPIRE_MS) {
+        this.logout();
+        return false;
+      }
+      this.lastActiveAt = Date.now();
+      this.persistAuth();
+      return true;
     },
 
     /** 保存后端返回的 token + user */
@@ -64,7 +113,8 @@ export const useUserStore = defineStore("user", {
       };
       this.token = res.token;
       this.currentUser = user;
-      localStorage.setItem(CURRENT_KEY, JSON.stringify({ token: res.token, user }));
+      this.lastActiveAt = Date.now();
+      this.persistAuth();
     },
 
     /** 注册（需邮箱验证码，成功后端直接签发 token，等同于自动登录） */
@@ -102,9 +152,7 @@ export const useUserStore = defineStore("user", {
 
     /** 退出登录：清登录态 + 清空业务数据内存（数据均在后端） */
     logout() {
-      this.currentUser = null;
-      this.token = null;
-      localStorage.removeItem(CURRENT_KEY);
+      this.clearAuth();
       // store 在 action 运行时才实例化，静态 import 不会产生循环依赖问题
       useAgentStore().resetSessions();
       useTodoStore().resetTodos();
@@ -124,10 +172,7 @@ export const useUserStore = defineStore("user", {
 
       const updated: UserInfo = { ...this.currentUser, ...payload };
       this.currentUser = updated;
-      localStorage.setItem(
-        CURRENT_KEY,
-        JSON.stringify({ token: this.token, user: updated }),
-      );
+      this.persistAuth();
       return { ok: true, msg: "资料已更新（本地生效）" };
     },
   },

@@ -14,6 +14,7 @@ import SketchCheckbox from "@/components/sketch/SketchCheckbox.vue";
 import DecorDotCluster from "@/components/sketch/DecorDotCluster.vue";
 import SketchBorder from "@/components/sketch/SketchBorder.vue";
 import DualTextBlock from "@/components/sketch/DualTextBlock.vue";
+import SketchConfirmDialog from "@/components/sketch/SketchConfirmDialog.vue";
 
 interface Props {
   id: string | string[];
@@ -36,14 +37,22 @@ const submitted = ref(false);
 const accepted = ref(false);
 const submitting = ref(false);
 const reAdding = ref(false);
+// 可选评论：用户对建议想说的话，和 接受/拒绝 + 是否入计划表 一起打包触发 Agent 二次回复
+const comment = ref("");
+// 点了「我接受」之后、尚未选择是否入计划表的追问阶段（此时反馈还未提交）
+const askAddTodo = ref(false);
+const addingTodo = ref(false);
+// Agent 二次回复（提交后优先用接口实时返回，历史回看用 record 里的持久化值）
+const replyText = ref("");
 
 const choiceMeta: Record<FeedbackChoice, { cn: string; symbol: string; accept: boolean }> = {
   accept: { cn: "我接受", symbol: "✓", accept: true },
   reject: { cn: "我拒绝", symbol: "✕", accept: false },
 };
 
-// 删除记录
+// 删除记录：手绘弹窗二次确认
 const deleting = ref(false);
+const confirmOpen = ref(false);
 
 // 该会话对应的待办是否还在计划表中（可能被用户从计划表删掉）
 const linkedTodo = computed(() =>
@@ -63,6 +72,8 @@ onMounted(async () => {
     if (detail.record) {
       submitted.value = true;
       accepted.value = detail.record.userAcceptSuggest;
+      comment.value = detail.record.feedbackComment ?? "";
+      replyText.value = detail.record.agentReply ?? "";
     }
   } else {
     notFound.value = true;
@@ -83,27 +94,63 @@ const ringDeco: RingDeco[] = [
   { bottom: "2%", right: "10%", rotate: -8, size: 26 },
 ];
 
-// 提交反馈：接受则自动加入计划表（是否完成之后在计划表勾选）
-async function submitFeedback(c: FeedbackChoice) {
-  if (submitted.value || submitting.value || !session.value) return;
-  const meta = choiceMeta[c];
+// 点「我接受」：先追问是否加入计划表（吃饭/出门这类即时决定可以不加入），反馈暂不提交
+function submitFeedback(c: FeedbackChoice) {
+  if (submitted.value || submitting.value || addingTodo.value || !session.value) return;
+  if (c === "accept") {
+    askAddTodo.value = true;
+    return;
+  }
+  void doSubmit(false, false);
+}
+
+// 真正提交反馈：态度 + 是否入计划表 + 评论一次打包，后端二次调用 LLM 生成回应
+async function doSubmit(acceptChoice: boolean, addToTodo: boolean) {
+  if (!session.value || submitting.value) return;
   submitting.value = true;
   try {
-    await store.submitRecord({
+    const saved = await store.submitRecord({
       sessionId: session.value.sessionId,
-      userAcceptSuggest: meta.accept,
+      userAcceptSuggest: acceptChoice,
       isExecute: false,
       actualCostMin: 0,
       executeResult: "",
+      comment: comment.value.trim(),
+      addToTodo,
+      withReply: true,
     });
-    if (meta.accept) {
-      await addIntoTodoList();
-      accepted.value = true;
+    // store 内部吞掉异常并返回 undefined：提交失败时停留原状态，允许重试
+    if (!saved) {
+      window.alert("反馈提交失败，请确认后端已启动后重试");
+      return;
     }
     submitted.value = true;
+    accepted.value = acceptChoice;
+    askAddTodo.value = false;
+    replyText.value = saved.agentReply ?? "";
   } finally {
     submitting.value = false;
   }
+}
+
+// 追问中点击「加入计划表」：先入表，再连同决定一起提交
+async function confirmAddTodo() {
+  if (addingTodo.value || !session.value) return;
+  addingTodo.value = true;
+  try {
+    await addIntoTodoList(false);
+    await doSubmit(true, true);
+  } catch (e) {
+    window.alert((e as Error).message || "加入计划表失败，请重试");
+  } finally {
+    addingTodo.value = false;
+  }
+}
+
+// 追问中点击「不用了」：即时决定不入表，直接提交接受反馈（之后仍可在下方补加入）
+function skipAddTodo() {
+  if (addingTodo.value) return;
+  void doSubmit(true, false);
 }
 
 // 加入 / 重新加入计划表；重新加入时把执行状态重置为未执行（新一轮追踪）
@@ -136,16 +183,22 @@ async function reAddTodo() {
   }
 }
 
-async function deleteRecord() {
+// 点击「删除记录」：只打开确认弹窗
+function deleteRecord() {
   if (deleting.value || !session.value) return;
-  if (!window.confirm("确定删除这条决策记录吗？任务输入、Agent 建议、反馈以及由它加入计划表的待办将一并删除，且不可恢复。"))
-    return;
+  confirmOpen.value = true;
+}
+
+// 弹窗确认后真正删除
+async function confirmDelete() {
+  if (deleting.value || !session.value) return;
   deleting.value = true;
   try {
     await store.deleteSession(session.value.sessionId);
     await todoStore.loadTodos();
     router.push("/");
   } catch (e) {
+    confirmOpen.value = false;
     window.alert((e as Error).message || "删除失败，请稍后再试");
     deleting.value = false;
   }
@@ -295,6 +348,10 @@ const categoryLabel: Record<string, string> = {
                 </p>
               </div>
             </div>
+            <!-- 补充条件（可选，未填写则不展示） -->
+            <p v-if="task.extraContext" class="mt-3 text-sm font-light text-sketch-lineSub">
+              补充条件：{{ task.extraContext }}
+            </p>
           </div>
 
           <!-- 最小行动 -->
@@ -317,18 +374,42 @@ const categoryLabel: Record<string, string> = {
           <SketchBorder padding="2rem">
             <DualTextBlock cn="你的决定与反馈" en="YOUR DECISION & FEEDBACK" size="md" weight="normal" />
 
-            <!-- 未反馈：做决定 -->
-            <div v-if="!submitted" class="mt-4 flex flex-wrap gap-3">
-              <LinearButton
-                v-for="(meta, key) in choiceMeta"
-                :key="key"
-                size="md"
-                :disabled="submitting"
-                @click="submitFeedback(key as FeedbackChoice)"
-              >
-                <span class="mr-1">{{ meta.symbol }}</span>
-                <span>{{ meta.cn }}</span>
-              </LinearButton>
+            <!-- 未反馈：可选评论 + 做决定（接受后先追问是否入计划表，再一起提交） -->
+            <div v-if="!submitted" class="mt-4 space-y-4">
+              <textarea
+                v-model="comment"
+                class="sketch-input w-full resize-none"
+                rows="2"
+                maxlength="500"
+                :disabled="submitting || addingTodo"
+                placeholder="想再说点什么吗？（可选）例如：可以，我就这么干"
+              />
+              <!-- 决定按钮 -->
+              <div v-if="!askAddTodo" class="flex flex-wrap gap-3">
+                <LinearButton
+                  v-for="(meta, key) in choiceMeta"
+                  :key="key"
+                  size="md"
+                  :disabled="submitting"
+                  @click="submitFeedback(key as FeedbackChoice)"
+                >
+                  <span class="mr-1">{{ meta.symbol }}</span>
+                  <span>{{ meta.cn }}</span>
+                </LinearButton>
+              </div>
+              <!-- 接受后追问：是否加入计划表 -->
+              <div v-else class="flex flex-wrap items-center gap-3">
+                <span class="text-sm font-light">要把这件事加入计划表吗？</span>
+                <span class="text-xs text-sketch-lineSub font-light">
+                  吃饭、出门这类即时决定可以不用加入
+                </span>
+                <LinearButton size="sm" :disabled="addingTodo || submitting" @click="confirmAddTodo">
+                  {{ addingTodo || submitting ? "提交中…" : "加入计划表" }}
+                </LinearButton>
+                <LinearButton size="sm" :disabled="addingTodo || submitting" @click="skipAddTodo">
+                  不用了
+                </LinearButton>
+              </div>
             </div>
 
             <!-- 已反馈：回显真实状态 -->
@@ -347,9 +428,22 @@ const categoryLabel: Record<string, string> = {
                   {{ formatDate(record.createdAt) }}
                 </span>
               </div>
+
+              <!-- 用户当时的留言 -->
+              <p v-if="comment" class="text-sm font-light text-sketch-lineSub">
+                我的留言：{{ comment }}
+              </p>
               <p v-if="record?.executeResult" class="text-sm text-sketch-lineSub font-light">
                 {{ record.executeResult }}
               </p>
+
+              <!-- Agent 收到决定后的二次回复 -->
+              <div v-if="replyText" class="sketch-border-l">
+                <DualTextBlock cn="Agent 的回应" en="AGENT REPLY" size="sm" weight="normal" />
+                <p class="mt-2 text-sm font-light leading-relaxed">
+                  {{ replyText }}
+                </p>
+              </div>
 
               <!-- 计划状态 -->
               <div v-if="accepted" class="pt-3 sketch-border-t flex flex-wrap items-center gap-3">
@@ -370,10 +464,10 @@ const categoryLabel: Record<string, string> = {
                 </template>
                 <template v-else>
                   <span class="text-sm font-light text-sketch-lineSub">
-                    对应的待办已从计划表移除。
+                    这条建议没有进入计划表。
                   </span>
                   <LinearButton size="sm" :disabled="reAdding" @click="reAddTodo">
-                    {{ reAdding ? "加入中…" : "重新加入计划表" }}
+                    {{ reAdding ? "加入中…" : "加入计划表" }}
                   </LinearButton>
                 </template>
               </div>
@@ -389,5 +483,17 @@ const categoryLabel: Record<string, string> = {
         </div>
       </div>
     </div>
+
+    <!-- 删除确认：手绘风弹窗 -->
+    <SketchConfirmDialog
+      :open="confirmOpen"
+      title="删除决策记录"
+      en-title="DELETE RECORD"
+      message="任务输入、Agent 建议、反馈以及由它加入计划表的待办将一并删除，且不可恢复。"
+      confirm-text="确认删除"
+      :loading="deleting"
+      @confirm="confirmDelete"
+      @cancel="confirmOpen = false"
+    />
   </PageWrapper>
 </template>

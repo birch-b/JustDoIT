@@ -52,6 +52,12 @@ export function buildPrompt(
     dto.location ? `地点：${dto.location}` : '地点：未指定',
   ];
 
+  // 补充条件（可选）：用户一句话描述不全时给的背景/约束，有填写才注入，避免空字段干扰
+  const extra = dto.extraContext?.trim();
+  if (extra) {
+    taskLines.push(`补充条件：${extra}`);
+  }
+
   // 第三步 3.3：长期记忆（提炼后的用户画像/偏好/规律），放在历史摘要之前，先立画像再看数据
   if (memoryText && memoryText.trim()) {
     taskLines.push('', '【用户长期记忆】', memoryText);
@@ -111,5 +117,61 @@ export function buildPrompt(
   return [
     { role: 'system', content: systemContent },
     { role: 'user', content: userContent },
+  ];
+}
+
+/** 二次回复所需的上下文（从实体按需取字段，避免 prompt 层依赖 TypeORM） */
+export interface FeedbackReplyContext {
+  taskContent: string;
+  category: string;
+  conclusion: string;
+  persuadeMode: string;
+  persuadeText: string;
+  minAction: string;
+  /** 用户接受(true)/拒绝(false)建议 */
+  accepted: boolean;
+  /** 接受后是否加入计划表（拒绝时无意义） */
+  addToTodo: boolean;
+  /** 用户的可选评论 */
+  comment: string;
+}
+
+/**
+ * 用户做完决定（接受/拒绝 + 是否入计划表 + 可选评论）后的二次对话 prompt。
+ * 让 Agent 以原来的劝说口吻给一句简短回应，不返回 JSON。
+ */
+export function buildFeedbackReplyPrompt(ctx: FeedbackReplyContext): LlmMessage[] {
+  const categoryLabel = CATEGORY_LABEL[ctx.category] ?? ctx.category;
+  const decisionLines = [
+    `任务：${ctx.taskContent}`,
+    `类别：${categoryLabel}`,
+    '',
+    '你之前给出的建议：',
+    `结论：${ctx.conclusion}`,
+    `劝说模式：${ctx.persuadeMode}`,
+    `劝说文案：${ctx.persuadeText}`,
+    `最小行动：${ctx.minAction}`,
+    '',
+    '用户的最终决定：',
+    ctx.accepted ? '态度：接受了建议' : '态度：拒绝了建议',
+  ];
+  if (ctx.accepted) {
+    decisionLines.push(ctx.addToTodo ? '计划：已加入计划表，之后会追踪完成情况' : '计划：不加入计划表（这是即时决定，不做计划追踪）');
+  }
+  if (ctx.comment) {
+    decisionLines.push('', `用户留言：${ctx.comment}`);
+  }
+
+  const systemContent = `你是同一个决策辅助 Agent，用户刚对你给出的建议做出了最终决定，现在请给用户一句简短的回应（30~60 字）。
+
+要求：
+1. 保持你原本的语气：激将模式就继续锋利一点，温柔模式就温和一点，理性模式就冷静一点。
+2. 用户接受建议：给一句鼓励或助推，可结合其留言；加入计划表的，提醒他按"最小行动"先开始第一步；没加入计划表的（比如吃饭、出门这种即时决定），祝他行动顺利即可，不要再提计划。
+3. 用户拒绝建议：尊重决定，不纠缠、不说教、不反复劝说，可以轻松留个台阶（如"那就先这样，下次纠结随时再来"）；若用户留言解释了原因，简短回应其原因。
+4. 不要提问、不要罗列选项、不要输出 JSON、不要换行分段，直接给一句话。`;
+
+  return [
+    { role: 'system', content: systemContent },
+    { role: 'user', content: decisionLines.join('\n') },
   ];
 }

@@ -28,6 +28,7 @@ export interface TaskCreateReq {
   location: string;
   enableTarot: boolean;        // 塔罗牌（抽 1 张）
   enableAnswerBook: boolean;   // 答案之书
+  extraContext?: string;       // 补充条件（可选，一句话描述不全时补充背景/约束）
 }
 
 // 待办项
@@ -65,11 +66,21 @@ export interface ActionRecordReq {
   isExecute: boolean;
   actualCostMin: number;
   executeResult: string;
+  /** 可选评论（做出接受/拒绝决定时填写） */
+  comment?: string;
+  /** 接受后是否加入计划表 */
+  addToTodo?: boolean;
+  /** 是否需要 Agent 二次回复（仅决定反馈为 true，执行回写不带） */
+  withReply?: boolean;
 }
 
 // 用户行为记录（持久化后回显用）
 export interface ActionRecord extends ActionRecordReq {
   recordId: number;
+  /** 提交时填写的评论 */
+  feedbackComment?: string;
+  /** Agent 对用户决定的二次回复 */
+  agentReply?: string;
   createdAt: string;
 }
 

@@ -26,6 +26,7 @@ const form = reactive<TaskCreateReq>({
   location: "",
   enableTarot: false,
   enableAnswerBook: true,
+  extraContext: "",
 });
 
 const submitting = ref(false);
@@ -64,8 +65,9 @@ async function submit() {
   submitting.value = true;
   try {
     // 创建会话：后端计算行动指数/劝说模式，并生成答案之书与塔罗牌
-    // 后端连不通时 store 内部用本地 mock 兜底
-    const session = await store.createSession({ ...form });
+    // 补充条件未填写时传空字符串，后端视为无补充
+    const payload = { ...form, extraContext: form.extraContext?.trim() ?? "" };
+    const session = await store.createSession(payload);
     router.push(`/session/${session.sessionId}`);
   } catch (e) {
     errorMsg.value = (e as Error).message;
@@ -85,6 +87,7 @@ function reset() {
   form.location = "";
   form.enableTarot = false;
   form.enableAnswerBook = true;
+  form.extraContext = "";
   errorMsg.value = "";
 }
 </script>
@@ -150,7 +153,7 @@ function reset() {
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div v-for="s in [
                 { key: 'willScore', cn: '主观意愿', en: 'WILL' },
-                { key: 'energyScore', cn: '当前精力', en: 'ENERGY' },
+                { key: 'energyScore', cn: '你的精力', en: 'ENERGY' },
                 { key: 'importance', cn: '重要度', en: 'IMPORTANCE' },
               ]" :key="s.key">
                 <div class="flex items-baseline justify-between">
@@ -201,13 +204,25 @@ function reset() {
               </label>
             </div>
 
+            <!-- 补充条件（可选）：一句话描述不全时补充背景或约束，留空即为无补充 -->
+            <div>
+              <DualTextBlock cn="补充条件（可选）" en="EXTRA CONTEXT (OPTIONAL)" size="sm" weight="normal" />
+              <textarea
+                v-model="form.extraContext"
+                class="sketch-input mt-2 w-full resize-none"
+                rows="2"
+                maxlength="500"
+                placeholder="例如：下午三点还有个会 / 最近膝盖有点疼，剧烈运动不行"
+              />
+            </div>
+
             <!-- 错误提示 -->
             <p v-if="errorMsg" class="text-xs text-sketch-line border border-sketch-line/40 px-3 py-2">
               {{ errorMsg }}
             </p>
 
-            <!-- 操作区 -->
-            <div class="flex flex-wrap gap-3 pt-6 sketch-border-t">
+            <!-- 操作区（不再使用顶部分隔线：补充条件输入框自带下划线，多一条横线会被误以为还能填写） -->
+            <div class="flex flex-wrap gap-3 pt-6">
               <LinearButton type="submit" size="lg" :disabled="submitting">
                 <span>{{ submitting ? "生成中…" : "生成行动建议" }}</span>
               </LinearButton>

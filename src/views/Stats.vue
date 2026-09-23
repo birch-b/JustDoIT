@@ -2,9 +2,10 @@
 // 个人统计页 /stats
 // 图表沿用 lieflat-charts 视觉语法（tick rows / tick gauge / 单位点阵），
 // 手绘 SVG + 品牌 custom 色板：奶米底、深棕墨线、薄荷灰绿为唯一 HERO 色
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAgentStore } from "@/store/agentStore";
+import { getMemories, type UserMemoryItem } from "@/api/memoryApi";
 import type { PersuadeMode } from "@/types";
 import PageWrapper from "@/components/layout/PageWrapper.vue";
 import LinearButton from "@/components/sketch/LinearButton.vue";
@@ -26,11 +27,51 @@ function rnd(i: number, k: number): number {
   return v - Math.floor(v);
 }
 
+/** 手绘不规则墨圈：起笔角度与半径逐点确定性抖动，闭合 Catmull-Rom 平滑（比纯圆生动、比涂鸦更圆） */
+function sketchCirclePath(cx: number, cy: number, r: number, seed: number): string {
+  const K = 9;
+  const a0 = rnd(seed, 13) * Math.PI * 2;
+  const pts: [number, number][] = [];
+  for (let i = 0; i < K; i++) {
+    const a = a0 + (i / K) * Math.PI * 2;
+    const wob = 1 + (rnd(seed * 3 + i, 11) - 0.5) * 0.2; // 半径 ±10% 抖动
+    pts.push([cx + Math.cos(a) * r * wob, cy + Math.sin(a) * r * wob]);
+  }
+  const P = (i: number) => pts[(i + K) % K];
+  let d = `M ${P(0)[0].toFixed(2)} ${P(0)[1].toFixed(2)}`;
+  for (let i = 0; i < K; i++) {
+    const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
+  }
+  return `${d} Z`;
+}
+
 const router = useRouter();
 const store = useAgentStore();
 
+// ── 顶部关键词汇总：来自长期记忆 user_memory（3.4 规则 + 3.5 LLM 提炼），按置信度取前 8 ──
+const memories = ref<UserMemoryItem[]>([]);
+const keywordChips = computed(() =>
+  [...memories.value]
+    .sort((a, b) => Number(b.confidence) - Number(a.confidence))
+    .slice(0, 8)
+    .map((m) => m.content),
+);
+
 onMounted(() => {
   store.loadSessions();
+  // 记忆读取失败不影响统计页主体，静默置空（显示引导文案）
+  getMemories()
+    .then((list) => {
+      memories.value = list;
+    })
+    .catch(() => {
+      memories.value = [];
+    });
 });
 
 const stats = computed(() => store.stats);
@@ -100,22 +141,28 @@ const willChart = computed(() => {
   }));
 
   const maxN = Math.max(1, ...cols.flatMap((c) => [c.doneN, c.undoneN]));
-  // 次数→像素：≤8 次用固定层距，更多再压缩
+  // 次数→像素：层距等距（y 轴刻度才能均匀对齐）；≤8 次用固定层距，更多再压缩
   const pitch = maxN <= 8 ? 18 : (BUB_BASE - BUB_TOP - 8) / maxN;
-  const yFor = (n: number) => BUB_BASE - DOT_R - 3 - (n - 1) * pitch;
+  const yFor = (n: number) => BUB_BASE - n * pitch;
 
-  // 每个意愿分：一个实心点(执行次数) + 一个空心点(未执行次数)；同次数则左右排开
+  // 每个意愿分：一个实心墨圈(执行次数) + 一个空心墨圈(未执行次数)；同次数则左右排开
   const dots = cols.flatMap((c, ci) => {
     const same = c.doneN > 0 && c.doneN === c.undoneN;
-    const mk = (completed: boolean, n: number, side: -1 | 0 | 1) => ({
-      w: c.w,
-      completed,
-      n,
-      cx: c.cx + side * PAIR_DX + (rnd(c.w * 7 + (completed ? 1 : 2), 5) - 0.5) * 1.6,
-      cy: yFor(n), // y 严格对齐次数刻度，不抖动
-      r: DOT_R + (rnd(c.w * 7 + (completed ? 3 : 4), 9) - 0.5) * 1.8,
-      delay: 0.12 + ci * 0.06 + (completed ? 0 : 0.05),
-    });
+    const mk = (completed: boolean, n: number, side: -1 | 0 | 1) => {
+      const cx = c.cx + side * PAIR_DX + (rnd(c.w * 7 + (completed ? 1 : 2), 5) - 0.5) * 1.6;
+      const cy = yFor(n); // y 严格对齐次数刻度，不抖动
+      const r = DOT_R + (rnd(c.w * 7 + (completed ? 3 : 4), 9) - 0.5) * 1.8;
+      return {
+        w: c.w,
+        completed,
+        n,
+        cx,
+        cy,
+        r,
+        d: sketchCirclePath(cx, cy, r, c.w * 31 + (completed ? 5 : 9)),
+        delay: 0.12 + ci * 0.06 + (completed ? 0 : 0.05),
+      };
+    };
     const out: ReturnType<typeof mk>[] = [];
     if (c.doneN > 0) out.push(mk(true, c.doneN, same ? -1 : 0));
     if (c.undoneN > 0) out.push(mk(false, c.undoneN, same ? 1 : 0));
@@ -154,6 +201,24 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
     >
       <SketchCheckbox :size="b.size" :rotate="b.rotate" decorative />
     </div>
+
+    <!-- 偏好关键词汇总：你是一个什么样的决策者（长期记忆，样本不足时引导多做几次纠结） -->
+    <!-- 水平内边距 3rem：边框 SVG 用 preserveAspectRatio=none 拉伸，整行宽卡片的左右边框会被拉得更靠内 -->
+    <SketchBorder padding="2rem 3rem" class="mb-8 sm:mb-10">
+      <DualTextBlock cn="关于你的关键词" en="KEYWORDS ABOUT YOU" size="sm" weight="normal" />
+      <div v-if="keywordChips.length" class="mt-3 flex flex-wrap gap-2.5">
+        <span
+          v-for="(word, i) in keywordChips"
+          :key="i"
+          class="inline-block border border-sketch-line/45 px-3 py-1.5 text-xs sm:text-sm font-light leading-snug"
+        >
+          {{ word }}
+        </span>
+      </div>
+      <p v-else class="mt-3 text-sm font-light text-sketch-lineSub leading-relaxed">
+        再做几次纠结并留下反馈，这里会慢慢浮现关于你的关键词——你更容易被什么说动、总在什么事上拖延。
+      </p>
+    </SketchBorder>
 
     <!-- 顶部 KPI：接受率带 tick gauge -->
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-5 mb-8 sm:mb-10">
@@ -260,12 +325,12 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
           <div class="flex shrink-0 items-center gap-3 pt-1 text-[10px] text-sketch-lineSub">
             <span class="flex items-center gap-1.5 whitespace-nowrap">
               <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-                <circle cx="7" cy="7" r="5" :fill="HERO_DEEP" />
+                <path :d="sketchCirclePath(7, 7, 5, 101)" :fill="HERO_DEEP" :stroke="HERO_DEEP" stroke-width="0.8" stroke-linejoin="round" />
               </svg>已执行
             </span>
             <span class="flex items-center gap-1.5 whitespace-nowrap">
               <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-                <circle cx="7" cy="7" r="5" fill="#FFF2E1" :stroke="MUT" stroke-width="1.4" />
+                <path :d="sketchCirclePath(7, 7, 5, 202)" fill="#FFF2E1" :stroke="MUT" stroke-width="1.4" stroke-linejoin="round" />
               </svg>未执行
             </span>
           </div>
@@ -279,7 +344,7 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
           </p>
         </div>
 
-        <svg v-else viewBox="0 0 400 262" class="mt-4 w-full" role="img" aria-label="意愿分数与执行双点图：横轴意愿1到10，纵轴次数；每个意愿分上实心点高度为已执行次数、空心点高度为未执行次数，次数相同时左右排开">
+        <svg v-else viewBox="0 0 400 262" class="mt-4 w-full" role="img" aria-label="意愿分数与执行手绘墨点图：横轴意愿1到10，纵轴次数；每个意愿分上实心墨圈高度为已执行次数、空心墨圈高度为未执行次数，次数相同时左右排开">
           <!-- y 轴：次数（横向导轨 + 左侧数字，对齐每一层圆点） -->
           <g v-for="t in willChart.yTicks" :key="`y${t.k}`">
             <line
@@ -329,16 +394,15 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
             font-family="'Noto Sans SC', Inter, sans-serif" letter-spacing="0.05em"
           >意愿分数 · 1 不想做 → 10 很想做</text>
 
-          <!-- 决策气泡：自下而上逐个弹入；实心沉底=已执行，空心摞其上=未执行 -->
-          <circle
+          <!-- 决策气泡：自下而上逐个弹入；实心沉底=已执行，空心摞其上=未执行（手绘不规则墨圈） -->
+          <path
             v-for="(d, i) in willChart.dots"
             :key="`d${i}`"
-            :cx="d.cx"
-            :cy="d.cy"
-            :r="d.r"
+            :d="d.d"
             :fill="d.completed ? HERO_DEEP : '#FFF2E1'"
             :stroke="d.completed ? HERO_DEEP : MUT"
-            :stroke-width="d.completed ? 0 : 1.4"
+            :stroke-width="d.completed ? 0.8 : 1.4"
+            stroke-linejoin="round"
             class="box-pop"
             :style="{ animationDelay: `${d.delay}s` }"
           />

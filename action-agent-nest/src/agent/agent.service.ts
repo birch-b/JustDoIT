@@ -12,7 +12,10 @@ import { TarotService } from './tarot.service';
 import { TodoService } from './todo.service';
 import { LlmService } from './llm.service';
 import { MemoryService } from '../memory/memory.service';
+import { BehaviorMemoryService } from '../memory/behavior-memory.service';
+import { LlmMemoryService } from '../memory/llm-memory.service';
 import { UserMemory } from '../memory/entities/user-memory.entity';
+import { buildFeedbackReplyPrompt } from './agent.prompt';
 
 // 劝说模式文案（规则 fallback 用），key 与前端 PersuadeMode 联合类型完全对齐
 const PERSUADE_TEXTS: Record<string, string> = {
@@ -38,6 +41,8 @@ export class AgentService {
     private readonly todoService: TodoService,
     private readonly llmService: LlmService,
     private readonly memoryService: MemoryService,
+    private readonly behaviorMemoryService: BehaviorMemoryService,
+    private readonly llmMemoryService: LlmMemoryService,
   ) {}
 
   /** 创建会话：取历史 → 保存任务 → 计算建议 → 神秘加成 → 保存会话 */
@@ -59,6 +64,7 @@ export class AgentService {
       location: dto.location ?? '',
       enableTarot: !!dto.enableTarot,
       enableAnswerBook: dto.enableAnswerBook !== false,
+      extraContext: dto.extraContext?.trim() ?? '',
     });
     const savedTask = await this.taskRepo.save(task);
 
@@ -143,16 +149,19 @@ export class AgentService {
     return this.toHistoryDetail(session, record ?? null, dynamicSummary);
   }
 
-  /** 提交/更新行为反馈（按会话 upsert，校验归属） */
+  /** 提交/更新行为反馈（按会话 upsert，校验归属）；写入后异步对齐长期记忆（3.4） */
   async submitRecord(userId: number, dto: ActionRecordDto) {
-    await this.findOwnedSession(userId, dto.sessionId);
+    const session = await this.findOwnedSession(userId, dto.sessionId);
 
     let record = await this.recordRepo.findOne({ where: { sessionId: dto.sessionId } });
+    // 评论只在"做出决定"的那次反馈（comment 字段显式给出）写入；计划表勾选执行的回写不带它，保留原评论
+    const comment = dto.comment !== undefined ? dto.comment.trim() || null : undefined;
     if (record) {
       record.userAcceptSuggest = dto.userAcceptSuggest;
       record.isExecute = dto.isExecute;
       record.actualCostMin = dto.actualCostMin;
       record.executeResult = dto.executeResult ?? '';
+      if (comment !== undefined) record.feedbackComment = comment;
     } else {
       record = this.recordRepo.create({
         sessionId: dto.sessionId,
@@ -160,9 +169,31 @@ export class AgentService {
         isExecute: dto.isExecute,
         actualCostMin: dto.actualCostMin,
         executeResult: dto.executeResult ?? '',
+        feedbackComment: comment ?? null,
+        agentReply: null,
       });
     }
+
+    // 用户做出接受/拒绝决定时：把 态度 + 是否入计划表 + 评论 打包，二次调用 LLM 生成一句回应。
+    // 仅 withReply=true 的请求触发（计划表执行回写不触发）；失败用本地兜底文案，绝不影响反馈主流程。
+    if (dto.withReply === true) {
+      record.agentReply = await this.generateFeedbackReply(
+        session,
+        dto.userAcceptSuggest,
+        dto.addToTodo === true,
+        comment ?? '',
+      );
+    }
+
     const saved = await this.recordRepo.save(record);
+
+    // 3.4 附加逻辑：按本类别的真实反馈重算并对齐长期记忆（失败只记日志，不影响反馈返回）
+    await this.behaviorMemoryService.syncFromFeedback(userId, session.task.category);
+
+    // 3.5 附加逻辑：异步让 LLM 从长期行为提炼稳定偏好写回记忆（fire-and-forget，
+    // 服务内 10 分钟节流 + 样本下限，失败只记日志，不阻塞反馈返回）
+    void this.llmMemoryService.maybeExtractFromBehavior(userId);
+
     return this.toRecordRes(saved);
   }
 
@@ -170,6 +201,7 @@ export class AgentService {
   async deleteSession(userId: number, sessionId: number) {
     const session = await this.findOwnedSession(userId, sessionId);
     const taskId = session.task.id;
+    const category = session.task.category;
 
     // 由该会话加入计划表的待办一并删除
     await this.todoService.deleteBySession(sessionId);
@@ -177,6 +209,9 @@ export class AgentService {
     await this.recordRepo.delete({ sessionId });
     await this.sessionRepo.delete(sessionId);
     await this.taskRepo.delete(taskId);
+
+    // 3.4：派生记忆随样本变化重算（样本归零则回收该类别受管记忆）
+    await this.behaviorMemoryService.syncFromFeedback(userId, category);
 
     return { success: true };
   }
@@ -196,10 +231,16 @@ export class AgentService {
 
     const sessionIds = owned.map((s) => s.id);
     const taskIds = owned.map((s) => s.task.id);
+    const categories = [...new Set(owned.map((s) => s.task.category))];
     await this.todoService.deleteBySessions(sessionIds);
     await this.recordRepo.delete({ sessionId: In(sessionIds) });
     await this.sessionRepo.delete(sessionIds);
     await this.taskRepo.delete(taskIds);
+
+    // 3.4：受影响类别的派生记忆逐一重算
+    for (const category of categories) {
+      await this.behaviorMemoryService.syncFromFeedback(userId, category);
+    }
 
     return { success: true, deleted: sessionIds.length };
   }
@@ -215,6 +256,35 @@ export class AgentService {
       return llm;
     }
     return this.computeAdviceByRule(dto);
+  }
+
+  /**
+   * 用户决定后的二次回复：态度 + 是否入计划表 + 评论打包给 LLM 生成一句话。
+   * LLM 不可用时按接受/拒绝走本地兜底文案，保证前端总有回应。
+   */
+  private async generateFeedbackReply(
+    session: TaskSession,
+    accepted: boolean,
+    addToTodo: boolean,
+    comment: string,
+  ): Promise<string> {
+    const messages = buildFeedbackReplyPrompt({
+      taskContent: session.task.taskContent,
+      category: session.task.category,
+      conclusion: session.conclusion,
+      persuadeMode: session.persuadeMode,
+      persuadeText: session.persuadeText,
+      minAction: session.minAction,
+      accepted,
+      addToTodo,
+      comment,
+    });
+    const reply = await this.llmService.chatText(messages, 0.7);
+    if (reply) return reply;
+    if (!accepted) return '好，那就先按你自己的节奏来，下次纠结随时找我。';
+    return addToTodo
+      ? '决定了就别反悔，按最小行动先开始第一步，我在这儿等你的完成打卡。'
+      : '行，说走就走，先行动起来吧。';
   }
 
   /**
@@ -436,6 +506,7 @@ export class AgentService {
         location: s.task.location,
         enableTarot: s.task.enableTarot,
         enableAnswerBook: s.task.enableAnswerBook,
+        extraContext: s.task.extraContext,
       },
       record: record ? this.toRecordRes(record) : null,
       createdAt: s.createdAt.toISOString(),
@@ -451,6 +522,8 @@ export class AgentService {
       isExecute: r.isExecute,
       actualCostMin: r.actualCostMin,
       executeResult: r.executeResult ?? '',
+      feedbackComment: r.feedbackComment ?? '',
+      agentReply: r.agentReply ?? '',
       createdAt: r.createdAt.toISOString(),
     };
   }

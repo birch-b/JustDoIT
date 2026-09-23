@@ -56,6 +56,10 @@ export class Task {
   @Column({ type: 'boolean', default: true })
   enableAnswerBook: boolean;
 
+  /** 补充条件（可选：一句话描述不全时的背景/约束，空字符串表示无补充） */
+  @Column({ type: 'varchar', length: 500, default: '' })
+  extraContext: string;
+
   @CreateDateColumn()
   createdAt: Date;
 }
