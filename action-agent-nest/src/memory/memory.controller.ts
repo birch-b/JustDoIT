@@ -15,6 +15,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { MemoryService } from './memory.service';
+import { LlmMemoryService } from './llm-memory.service';
 import { CreateMemoryDto } from './dto/create-memory.dto';
 import { UpdateMemoryDto } from './dto/update-memory.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -23,11 +24,21 @@ import { GetUser } from '../common/decorators/get-user.decorator';
 @Controller('memory')
 @UseGuards(JwtAuthGuard)
 export class MemoryController {
-  constructor(private readonly memoryService: MemoryService) {}
+  constructor(
+    private readonly memoryService: MemoryService,
+    private readonly llmMemoryService: LlmMemoryService,
+  ) {}
 
   @Get()
   async list(@GetUser('userId') userId: number) {
     return this.memoryService.list(userId);
+  }
+
+  // 统计页底部综合论述：LLM 把全部记忆揉成一段整体画像；无记忆/LLM 失败时 summary 为 null
+  @Get('summary')
+  async summary(@GetUser('userId') userId: number): Promise<{ summary: string | null }> {
+    const summary = await this.llmMemoryService.getOverallSummary(userId);
+    return { summary };
   }
 
   @Post()

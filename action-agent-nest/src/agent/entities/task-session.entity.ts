@@ -51,9 +51,17 @@ export class TaskSession {
   @Column({ type: 'text', nullable: true })
   tarotCards: string | null;
 
+  /** 塔罗牌一句话解析（LLM 结合任务生成，可为空） */
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  tarotReading: string | null;
+
   /** 答案之书的回答（可为空） */
   @Column({ type: 'varchar', length: 500, nullable: true })
   answerBook: string | null;
+
+  /** 答案之书一句话解读（LLM 顺着随机答案的意象写，圆回主结论，可为空） */
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  answerBookReading: string | null;
 
   /** 历史行为摘要（读时动态生成，列仅兼容老数据保留） */
   @Column({ type: 'text', nullable: true })

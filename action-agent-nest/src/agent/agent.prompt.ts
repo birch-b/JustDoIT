@@ -12,6 +12,10 @@ export interface LlmAdvice {
   persuadeMode: PersuadeMode;
   persuadeText: string;
   minAction: string;
+  /** 塔罗牌一句话解读（LLM 结合结论与牌面生成，可选） */
+  tarotReading?: string;
+  /** 答案之书一句话解读（LLM 顺着随机答案的意象写，圆回主结论，可选） */
+  answerBookReading?: string;
 }
 
 export interface LlmMessage {
@@ -39,6 +43,7 @@ export function buildPrompt(
   dto: CreateSessionDto,
   historySummary?: string,
   memoryText?: string,
+  extras?: { tarotCard?: string; answerBookText?: string },
 ): LlmMessage[] {
   const categoryLabel = CATEGORY_LABEL[dto.category] ?? dto.category;
   const taskLines = [
@@ -56,6 +61,23 @@ export function buildPrompt(
   const extra = dto.extraContext?.trim();
   if (extra) {
     taskLines.push(`补充条件：${extra}`);
+  }
+
+  // 今日天气（可选）：勾选天气加成后，实时天气 + 用户对天气的打分；摘要与打分齐全才注入
+  const weatherText = dto.weatherText?.trim();
+  if (weatherText && dto.weatherScore) {
+    const city = dto.weatherCity?.trim() ? `${dto.weatherCity!.trim()} · ` : '';
+    taskLines.push(`今日天气：${city}${weatherText}；用户对今日天气的打分：${dto.weatherScore}/10（分数越低表示越不喜欢、越可能被天气影响状态）`);
+  }
+
+  // 塔罗牌（可选）：提前抽好的牌面，注入给主 LLM 顺带写解读，保证与结论方向一致
+  if (extras?.tarotCard) {
+    taskLines.push(`塔罗牌：${extras.tarotCard}`);
+  }
+
+  // 答案之书（可选）：外部 API 随机抽到的原文，注入给主 LLM 写解读，把意象圆回结论
+  if (extras?.answerBookText) {
+    taskLines.push(`答案之书给出的随机回应：「${extras.answerBookText}」`);
   }
 
   // 第三步 3.3：长期记忆（提炼后的用户画像/偏好/规律），放在历史摘要之前，先立画像再看数据
@@ -101,6 +123,15 @@ export function buildPrompt(
    长期记忆是基于历史行为的推断，不是绝对事实，不能因为单条记忆就武断给用户贴标签或预判结果。
    必须结合本次任务的意愿、精力、重要度、耗时，以及历史行为综合判断。
    例如记忆"面对长任务执行率低"，而本次是一个 30 分钟、高意愿、高精力的任务，就不应据此判定用户不会执行。
+9. 如果用户消息中提供了【今日天气】与天气打分，把它作为当下状态的轻量背景，不要喧宾夺主：
+   打分低（≤4）说明天气正在拖累用户状态——温柔劝说模式下可先共情天气，再把最小行动改得更小或转为室内可做；
+   打分高（≥8）说明天气宜人，可借势轻推一把；雨天/高温/大风等恶劣天气下，户外类任务应在结论或劝说中如实提示天气成本。
+   天气与任务明显无关（如室内写周报）时一句话带过即可，禁止每条建议都强行谈天气。
+10. 如果用户消息中提供了【塔罗牌】，把牌面（如"星辰 · 逆位"）作为意象参考融入解读，与结论方向保持一致：
+    结论说"去做"时牌意就顺势提示"牌面在推你一把"；结论说"暂缓"时牌意就顺势提示"先稳一稳"，不要让牌意与结论互相矛盾。
+11. 如果用户消息中提供了【答案之书给出的随机回应】，在 JSON 里多返回一个 answerBookReading 字段：
+    那是一句随机抽到的话，原文会原样展示给用户，你不能改写它；你要写一句解读（10~30字），顺着这句话的意象，把它与你的结论圆回来——
+    随机答案与结论同向时顺势呼应（"它在替你说'去吧'"）；看似相反时转换视角化解（"'再等等'也可以读作'别带杂念，轻装上阵'"），语气含蓄不说教，禁止承认矛盾或说"答案之书与你结论相反"。
 
 必须严格返回 JSON，格式如下：
 {
@@ -109,10 +140,14 @@ export function buildPrompt(
   "conclusion": "去做，趁现在状态在线",
   "persuadeMode": "温柔劝说模式",
   "persuadeText": "虽然精力一般，但这件事重要度较高，不需要一次做完，先开始就行。",
-  "minAction": "先学习15分钟原型链的概念"
+  "minAction": "先学习15分钟原型链的概念",
+  "tarotReading": "星光虽远，恰好照亮你迈出的第一步。",
+  "answerBookReading": "它在替你说：去吧。"
 }
 
-注意：shouldGo、agentSuggestIndex、conclusion 三者必须方向一致。persuadeMode 必须是三个值之一，不要返回其他值。只返回 JSON，不要有任何额外文字。`;
+注意：shouldGo、agentSuggestIndex、conclusion 三者必须方向一致。persuadeMode 必须是三个值之一，不要返回其他值。
+tarotReading 仅当用户消息中提供了塔罗牌时才返回：一句话解读，不超过40字，把牌意轻轻扣到这件事与结论上，语气含蓄不说教，不要出现"塔罗""牌"字样；未提供塔罗牌时不要返回此字段。
+answerBookReading 仅当用户消息中提供了答案之书的随机回应时才返回；未提供时不要返回此字段。只返回 JSON，不要有任何额外文字。`;
 
   return [
     { role: 'system', content: systemContent },

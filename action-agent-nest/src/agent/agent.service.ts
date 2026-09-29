@@ -15,7 +15,7 @@ import { MemoryService } from '../memory/memory.service';
 import { BehaviorMemoryService } from '../memory/behavior-memory.service';
 import { LlmMemoryService } from '../memory/llm-memory.service';
 import { UserMemory } from '../memory/entities/user-memory.entity';
-import { buildFeedbackReplyPrompt } from './agent.prompt';
+import { buildFeedbackReplyPrompt, LlmAdvice, type PersuadeMode } from './agent.prompt';
 
 // 劝说模式文案（规则 fallback 用），key 与前端 PersuadeMode 联合类型完全对齐
 const PERSUADE_TEXTS: Record<string, string> = {
@@ -65,23 +65,18 @@ export class AgentService {
       enableTarot: !!dto.enableTarot,
       enableAnswerBook: dto.enableAnswerBook !== false,
       extraContext: dto.extraContext?.trim() ?? '',
+      // 天气加成：摘要与打分齐全才落库（城市用于结果页展示）；只有城市没查到天气时视为未启用
+      weatherCity: dto.weatherText && dto.weatherScore ? (dto.weatherCity?.trim() || null) : null,
+      weatherText: dto.weatherText && dto.weatherScore ? dto.weatherText.trim() : null,
+      weatherScore: dto.weatherText && dto.weatherScore ? dto.weatherScore : null,
     });
     const savedTask = await this.taskRepo.save(task);
 
     // 2. 读取用户长期记忆（3.3），与历史摘要一起喂给 LLM；无记忆时为空串、不影响原流程
     const memoryText = await this.buildMemoryText(userId);
 
-    // 3. 调 DeepSeek LLM 生成建议（带入历史行为 + 长期记忆；失败时 fallback 到规则计算）
-    const advice = await this.generateAdvice(dto, historySummary, memoryText);
-    const { agentSuggestIndex, conclusion, persuadeMode, persuadeText, minAction } = advice;
-
-    // 4. 神秘加成：答案之书
-    let answerBook: string | null = null;
-    if (dto.enableAnswerBook !== false) {
-      answerBook = await this.answerBookService.ask(dto.taskContent);
-    }
-
-    // 5. 神秘加成：塔罗牌（第三方失败时本地随机兜底）
+    // 3. 神秘加成：塔罗牌先抽好（第三方失败时本地随机兜底），牌面注入主 prompt
+    //    让主 LLM 出结论时顺带写解读，保证解读与结论方向一致，不会出现"建议去做但牌劝退"的矛盾
     let tarotCards: string[] | undefined;
     if (dto.enableTarot) {
       const result = await this.tarotService.draw(5);
@@ -93,7 +88,25 @@ export class AgentService {
       }
     }
 
-    // 6. 保存会话（historySummary 在读取时动态生成，不存固定值）
+    // 3.5 神秘加成：答案之书先抽取（API 原文照显示），注入主 prompt 让 LLM 写解读把意象圆回结论
+    let answerBook: string | null = null;
+    if (dto.enableAnswerBook !== false) {
+      answerBook = await this.answerBookService.ask(dto.taskContent);
+    }
+
+    // 4. 调 DeepSeek LLM 生成建议（带入历史行为 + 长期记忆 + 牌面 + 答案之书原文；失败时 fallback 到规则计算）
+    const advice = await this.generateAdvice(dto, historySummary, memoryText, {
+      tarotCard: tarotCards?.[0],
+      answerBookText: answerBook ?? undefined,
+    });
+    const { agentSuggestIndex, conclusion, persuadeMode, persuadeText, minAction } = advice;
+    // 解读只在勾选塔罗时有效，且必须是 LLM 真实返回的（规则兜底无解读）
+    const tarotReading = tarotCards && advice.tarotReading ? advice.tarotReading.slice(0, 100) : null;
+    // 答案之书解读：LLM 顺着随机答案圆回结论；规则兜底时为 null
+    const answerBookReading =
+      answerBook && advice.answerBookReading ? advice.answerBookReading.trim().slice(0, 100) : null;
+
+    // 5. 保存会话（historySummary 在读取时动态生成，不存固定值）
     const session = this.sessionRepo.create({
       taskId: savedTask.id,
       agentSuggestIndex,
@@ -103,7 +116,9 @@ export class AgentService {
       minAction,
       taroCard: tarotCards ? tarotCards[0] : null,
       tarotCards: tarotCards ? JSON.stringify(tarotCards) : null,
+      tarotReading,
       answerBook,
+      answerBookReading,
     });
     const savedSession = await this.sessionRepo.save(session);
 
@@ -250,8 +265,9 @@ export class AgentService {
     dto: CreateSessionDto,
     historySummary?: string,
     memoryText?: string,
+    extras?: { tarotCard?: string; answerBookText?: string },
   ) {
-    const llm = await this.llmService.generateAdvice(dto, historySummary, memoryText);
+    const llm = await this.llmService.generateAdvice(dto, historySummary, memoryText, extras);
     if (llm) {
       return llm;
     }
@@ -307,7 +323,7 @@ export class AgentService {
   }
 
   /** 规则兜底：LLM 不可用时使用（保留原规则逻辑） */
-  private computeAdviceByRule(dto: CreateSessionDto) {
+  private computeAdviceByRule(dto: CreateSessionDto): LlmAdvice {
     const base = dto.willScore * 5 + dto.energyScore * 3 + dto.importance * 2;
     const agentSuggestIndex = Math.max(
       5,
@@ -315,7 +331,7 @@ export class AgentService {
     );
 
     // 劝说模式只按指数分档；塔罗/答案之书是附加展示，不影响劝说模式
-    let persuadeMode = '理性分析模式';
+    let persuadeMode: PersuadeMode = '理性分析模式';
     if (agentSuggestIndex < 40) {
       persuadeMode = '激将模式';
     } else if (agentSuggestIndex < 70) {
@@ -486,7 +502,9 @@ export class AgentService {
       minAction: s.minAction,
       taroCard: s.taroCard ?? undefined,
       tarotCards,
+      tarotReading: s.tarotReading ?? undefined,
       answerBook: answer !== undefined ? answer ?? undefined : s.answerBook ?? undefined,
+      answerBookReading: s.answerBookReading ?? undefined,
       historySummary: dynamicSummary ?? s.historySummary,
     };
   }
@@ -507,6 +525,9 @@ export class AgentService {
         enableTarot: s.task.enableTarot,
         enableAnswerBook: s.task.enableAnswerBook,
         extraContext: s.task.extraContext,
+        weatherCity: s.task.weatherCity,
+        weatherText: s.task.weatherText,
+        weatherScore: s.task.weatherScore,
       },
       record: record ? this.toRecordRes(record) : null,
       createdAt: s.createdAt.toISOString(),

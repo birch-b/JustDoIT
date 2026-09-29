@@ -68,4 +68,23 @@ export class CreateSessionDto {
   @IsString()
   @MaxLength(500)
   extraContext?: string;
+
+  /** 今日天气·城市（勾选天气加成时必填） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  weatherCity?: string | null;
+
+  /** 今日天气·摘要（后端天气接口返回的 summary 原样回传） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  weatherText?: string | null;
+
+  /** 用户对今日天气的打分 1-10 */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  weatherScore?: number | null;
 }

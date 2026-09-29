@@ -21,8 +21,9 @@ export class LlmService {
     dto: CreateSessionDto,
     historySummary?: string,
     memoryText?: string,
+    extras?: { tarotCard?: string; answerBookText?: string },
   ): Promise<LlmAdvice | null> {
-    const messages = buildPrompt(dto, historySummary, memoryText);
+    const messages = buildPrompt(dto, historySummary, memoryText, extras);
     const parsed = (await this.chatJson(messages)) as LlmAdvice | null;
     if (!parsed) return null;
     // 字段校验：persuadeMode 必须是三个之一

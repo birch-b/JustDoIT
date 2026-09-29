@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { AnswerBookService } from './answerbook.service';
 import { TarotService, TarotResult } from './tarot.service';
+import { WeatherService, WeatherInfo } from './weather.service';
 import { AgentService } from './agent.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { ActionRecordDto } from './dto/action-record.dto';
@@ -13,6 +14,7 @@ export class AgentController {
   constructor(
     private readonly answerBookService: AnswerBookService,
     private readonly tarotService: TarotService,
+    private readonly weatherService: WeatherService,
     private readonly agentService: AgentService,
   ) {}
 
@@ -34,6 +36,16 @@ export class AgentController {
   async tarot(@Body('topicId') topicId?: number): Promise<{ code: number; data: TarotResult | null }> {
     const result = await this.tarotService.draw(topicId ?? 5);
     return { code: 0, data: result };
+  }
+
+  /**
+   * 今日天气：GET /api/agent/weather?city=武汉
+   * 公开接口；未配置 key/查询失败时 data 为 null，由前端提示且不阻塞提交
+   */
+  @Get('weather')
+  async weather(@Query('city') city: string): Promise<{ code: number; data: WeatherInfo | null }> {
+    const data = await this.weatherService.getWeather(city ?? '');
+    return { code: 0, data };
   }
 
   /** 创建会话：POST /api/agent/session/create（需登录） */

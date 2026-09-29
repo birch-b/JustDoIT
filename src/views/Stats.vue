@@ -5,7 +5,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAgentStore } from "@/store/agentStore";
-import { getMemories, type UserMemoryItem } from "@/api/memoryApi";
+import { getMemories, getMemorySummary, type UserMemoryItem } from "@/api/memoryApi";
 import type { PersuadeMode } from "@/types";
 import PageWrapper from "@/components/layout/PageWrapper.vue";
 import LinearButton from "@/components/sketch/LinearButton.vue";
@@ -53,13 +53,64 @@ function sketchCirclePath(cx: number, cy: number, r: number, seed: number): stri
 const router = useRouter();
 const store = useAgentStore();
 
-// ── 顶部关键词汇总：来自长期记忆 user_memory（3.4 规则 + 3.5 LLM 提炼），按置信度取前 8 ──
+// ── 顶部关键词汇总：来自长期记忆 user_memory（3.4 规则 + 3.5 LLM 提炼），按置信度排序 ──
+// 展示分两层：上层 keyword 气泡（3~5 字手绘墨圈 + 浮动动画），下层 content 完整总结句
 const memories = ref<UserMemoryItem[]>([]);
-const keywordChips = computed(() =>
-  [...memories.value]
-    .sort((a, b) => Number(b.confidence) - Number(a.confidence))
-    .slice(0, 8)
-    .map((m) => m.content),
+
+// 把已有记忆里残留的第三人称"用户"转成第二人称"你"，让总结更像朋友的观察而非机器画像。
+// 仅做轻量文本替换；新提炼的记忆已由 memory-insight.prompt.ts 要求第二人称口语化。
+function warmTone(text: string): string {
+  return text.replace(/^用户/, "你").replace(/用户/g, "你");
+}
+
+const sortedMemories = computed(() =>
+  [...memories.value].sort((a, b) => Number(b.confidence) - Number(a.confidence)),
+);
+
+interface KeywordBubble {
+  keyword: string;
+  /** 置信度前 2 名用 HERO 薄荷色描边 */
+  hero: boolean;
+  /** 手绘墨圈路径（viewBox 100×100 内的近圆，拉伸为椭圆气泡） */
+  d: string;
+  duration: string;
+  delay: string;
+  wide: boolean;
+}
+
+// 气泡只取带合法 keyword 的记忆（老数据 keyword 为空则只进底部总结），去重后最多 6 个
+const keywordBubbles = computed<KeywordBubble[]>(() => {
+  const seen = new Set<string>();
+  const out: KeywordBubble[] = [];
+  for (const m of sortedMemories.value) {
+    const kw = m.keyword?.trim();
+    if (!kw || seen.has(kw)) continue;
+    seen.add(kw);
+    const idx = out.length;
+    const seed = idx * 17 + 5;
+    out.push({
+      keyword: kw,
+      hero: idx < 2,
+      d: sketchCirclePath(50, 50, 47, seed),
+      // 浮动节奏/初始相位逐个错开（负 delay 让首屏相位就分散）
+      duration: `${(3.8 + rnd(seed, 3) * 1.8).toFixed(2)}s`,
+      delay: `${(-rnd(seed, 7) * 3.5).toFixed(2)}s`,
+      wide: kw.length >= 4,
+    });
+    if (out.length >= 6) break;
+  }
+  return out;
+});
+
+// 底部总结的兜底：LLM 综合论述还没返回/失败时，先显示置信度最高的单条记忆
+const topSummary = computed(() =>
+  sortedMemories.value.length ? warmTone(sortedMemories.value[0].content) : "",
+);
+// 综合论述：后端 LLM 把全部记忆揉成一段整体画像（跨类别、跨侧面），避免只讲某一条记忆
+const overallSummary = ref("");
+// 优先展示综合论述，未就绪时回落到 top1 单条
+const bottomSummary = computed(() =>
+  overallSummary.value ? warmTone(overallSummary.value) : topSummary.value,
 );
 
 onMounted(() => {
@@ -72,6 +123,12 @@ onMounted(() => {
     .catch(() => {
       memories.value = [];
     });
+  // 综合论述生成较慢（LLM），静默异步加载，到达后替换兜底文案；失败不打扰用户
+  getMemorySummary()
+    .then((text) => {
+      overallSummary.value = text ?? "";
+    })
+    .catch(() => {});
 });
 
 const stats = computed(() => store.stats);
@@ -202,19 +259,63 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
       <SketchCheckbox :size="b.size" :rotate="b.rotate" decorative />
     </div>
 
-    <!-- 偏好关键词汇总：你是一个什么样的决策者（长期记忆，样本不足时引导多做几次纠结） -->
+    <!-- 偏好关键词汇总：上层 3~5 字手绘墨圈气泡浮动，下层完整总结句（长期记忆，样本不足时引导多做几次纠结） -->
     <!-- 水平内边距 3rem：边框 SVG 用 preserveAspectRatio=none 拉伸，整行宽卡片的左右边框会被拉得更靠内 -->
     <SketchBorder padding="2rem 3rem" class="mb-8 sm:mb-10">
       <DualTextBlock cn="关于你的关键词" en="KEYWORDS ABOUT YOU" size="sm" weight="normal" />
-      <div v-if="keywordChips.length" class="mt-3 flex flex-wrap gap-2.5">
-        <span
-          v-for="(word, i) in keywordChips"
-          :key="i"
-          class="inline-block border border-sketch-line/45 px-3 py-1.5 text-xs sm:text-sm font-light leading-snug"
+
+      <template v-if="sortedMemories.length">
+        <!-- 上层：关键词墨圈气泡（没有 keyword 的老数据不渲染此区） -->
+        <div
+          v-if="keywordBubbles.length"
+          class="mt-7 flex flex-wrap items-center gap-x-6 gap-y-6"
         >
-          {{ word }}
-        </span>
-      </div>
+          <span
+            v-for="b in keywordBubbles"
+            :key="b.keyword"
+            class="kw-bubble relative inline-flex items-center justify-center leading-none"
+            :class="b.wide ? 'kw-bubble--wide' : ''"
+            :style="{
+              animationDuration: b.duration,
+              animationDelay: b.delay,
+              color: b.hero ? HERO_DEEP : INK,
+            }"
+          >
+            <svg
+              class="absolute inset-0 h-full w-full"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <!-- non-scaling-stroke：圆被拉成椭圆时描边粗细保持均匀 -->
+              <path
+                :d="b.d"
+                :stroke="b.hero ? HERO_DEEP : INK"
+                stroke-width="2.2"
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                vector-effect="non-scaling-stroke"
+              />
+            </svg>
+            <span class="relative z-10 text-sm sm:text-[15px] font-light tracking-wide">
+              {{ b.keyword }}
+            </span>
+          </span>
+        </div>
+
+        <!-- 下层：综合论述（LLM 把全部记忆揉成一段整体画像；未就绪时先显示 top1 单条兜底） -->
+        <template v-if="bottomSummary">
+          <hr v-if="keywordBubbles.length" class="sketch-hr mt-7" />
+          <p
+            class="text-sm sm:text-[15px] font-light leading-relaxed text-sketch-line"
+            :class="keywordBubbles.length ? 'mt-4' : 'mt-3'"
+          >
+            {{ bottomSummary }}
+          </p>
+        </template>
+      </template>
+
       <p v-else class="mt-3 text-sm font-light text-sketch-lineSub leading-relaxed">
         再做几次纠结并留下反馈，这里会慢慢浮现关于你的关键词——你更容易被什么说动、总在什么事上拖延。
       </p>
@@ -419,6 +520,28 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
 </template>
 
 <style scoped>
+/* 关键词墨圈气泡：尺寸由字数分两档，墨圈由内部 SVG 拉伸成椭圆；
+   浮动节奏/相位由 :style 逐个指定（见 keywordBubbles） */
+.kw-bubble {
+  padding: 0.7rem 1rem;
+  animation-name: bubble-float;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+.kw-bubble--wide {
+  padding: 0.7rem 1.3rem;
+}
+@keyframes bubble-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-0.7deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(0.7deg);
+  }
+}
+
 /* 入场动画：发丝线自基线向上生长 / 单位点弹出，遵循 quarticOut 快进快停 */
 @keyframes tick-rise {
   from {
@@ -478,7 +601,8 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
   .tick-rise,
   .box-pop,
   .stroke-draw,
-  .area-fade {
+  .area-fade,
+  .kw-bubble {
     animation: none;
     opacity: 1;
     stroke-dashoffset: 0;

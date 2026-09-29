@@ -7,6 +7,7 @@ import type {
   ActionRecord,
   SessionCardItem,
   HistoryDetail,
+  WeatherInfo,
 } from "@/types";
 import { authRequest } from "./http";
 
@@ -100,6 +101,21 @@ export const agentApi = {
       if (!res.ok) return null;
       const data = (await res.json()) as { code: number; data: { cards: TarotCardRes[] } | null };
       return data?.data?.cards ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * 今日天气：GET /api/agent/weather?city=武汉
+   * 公开接口；未配置 key/城市无效/网络失败时返回 null，由前端提示且不阻塞提交
+   */
+  async fetchWeather(city: string): Promise<WeatherInfo | null> {
+    try {
+      const res = await fetch(`/api/agent/weather?city=${encodeURIComponent(city)}`);
+      if (!res.ok) return null;
+      const data = (await res.json()) as { code: number; data: WeatherInfo | null };
+      return data?.data ?? null;
     } catch {
       return null;
     }

@@ -60,6 +60,18 @@ export class Task {
   @Column({ type: 'varchar', length: 500, default: '' })
   extraContext: string;
 
+  /** 今日天气·城市（勾选天气加成时填写，如 Wuhan/武汉） */
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  weatherCity: string | null;
+
+  /** 今日天气·摘要（如"小雨 · 22℃（体感21℃） · 湿度70% · 东风 8km/h"） */
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  weatherText: string | null;
+
+  /** 用户对今日天气的打分 1-10（越低越不喜欢/越受天气影响） */
+  @Column({ type: 'int', nullable: true })
+  weatherScore: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

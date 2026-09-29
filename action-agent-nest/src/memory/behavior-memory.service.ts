@@ -41,6 +41,9 @@ interface MemoryTemplate {
   /** pos=高比率文案，neg=低比率文案 */
   pos: (label: string) => string;
   neg: (label: string) => string;
+  /** 3~5 字气泡关键词（带类别前缀，避免多类别气泡撞词） */
+  kwPos: (label: string) => string;
+  kwNeg: (label: string) => string;
 }
 
 const TEMPLATES: MemoryTemplate[] = [
@@ -49,12 +52,16 @@ const TEMPLATES: MemoryTemplate[] = [
     memoryType: 'behavior',
     pos: (l) => `${l}类任务你通常愿意接受建议`,
     neg: (l) => `${l}类任务你通常不愿意接受建议`,
+    kwPos: (l) => `${l}听劝`,
+    kwNeg: (l) => `${l}有主见`,
   },
   {
     // 接受后是否真正执行
     memoryType: 'pattern',
     pos: (l) => `${l}类任务接受建议后通常能真正执行`,
     neg: (l) => `${l}类任务容易“接受建议却没真正执行”`,
+    kwPos: (l) => `${l}行动派`,
+    kwNeg: (l) => `${l}难落地`,
   },
 ];
 
@@ -203,25 +210,35 @@ export class BehaviorMemoryService {
     // 当前类别的受管命名空间（2 槽 × 正反 2 条）
     const scopedContents = new Set<string>();
     const scopedTypeOf = new Map<string, string>();
+    const scopedKeywordOf = new Map<string, string>();
     for (const t of TEMPLATES) {
-      for (const text of [t.pos(label), t.neg(label)]) {
+      const variants: Array<[string, string]> = [
+        [t.pos(label), t.kwPos(label)],
+        [t.neg(label), t.kwNeg(label)],
+      ];
+      for (const [text, keyword] of variants) {
         scopedContents.add(text);
         scopedTypeOf.set(text, t.memoryType);
+        scopedKeywordOf.set(text, keyword);
       }
     }
 
     const existing = await this.memoryRepo.find({ where: { userId } });
     const existingByContent = new Map(existing.map((m) => [m.content, m]));
 
-    // 1) 该类别已有受管记忆：期望中保留则更新置信度，不在期望中（翻转/回归中性/样本归零）则删除
+    // 1) 该类别已有受管记忆：期望中保留则更新置信度/补齐 keyword，不在期望中（翻转/回归中性/样本归零）则删除
     for (const mem of existing) {
       if (!scopedContents.has(mem.content)) continue;
       const wanted = desired.get(mem.content);
       if (wanted === undefined) {
         await this.memoryRepo.delete({ id: mem.id, userId });
-      } else if (Number(mem.confidence) !== wanted) {
-        mem.confidence = wanted;
-        await this.memoryRepo.save(mem);
+      } else {
+        const wantedKeyword = scopedKeywordOf.get(mem.content) ?? null;
+        if (Number(mem.confidence) !== wanted || mem.keyword !== wantedKeyword) {
+          mem.confidence = wanted;
+          mem.keyword = wantedKeyword;
+          await this.memoryRepo.save(mem);
+        }
       }
     }
 
@@ -232,6 +249,7 @@ export class BehaviorMemoryService {
         userId,
         memoryType: scopedTypeOf.get(content) ?? MANAGED_CONTENT_TYPE.get(content) ?? 'behavior',
         content,
+        keyword: scopedKeywordOf.get(content) ?? null,
         confidence,
       });
       await this.memoryRepo.save(created);

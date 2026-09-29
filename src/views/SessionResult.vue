@@ -314,6 +314,9 @@ const categoryLabel: Record<string, string> = {
             <div v-if="session.answerBook" class="mt-5 sketch-border-l pl-3">
               <DualTextBlock cn="答案之书" en="ANSWER BOOK" size="sm" weight="normal" />
               <p class="mt-1 text-sm font-light">「{{ session.answerBook }}」</p>
+              <p v-if="session.answerBookReading" class="mt-1 text-sm font-light leading-relaxed text-sketch-lineSub">
+                {{ session.answerBookReading }}
+              </p>
             </div>
 
             <!-- 塔罗牌 · 单张 -->
@@ -321,7 +324,21 @@ const categoryLabel: Record<string, string> = {
               <DualTextBlock cn="塔罗牌" en="TAROT" size="sm" weight="normal" />
               <div class="mt-2 border border-sketch-line/60 px-4 py-5 text-center">
                 <p class="text-lg font-light tracking-wide">{{ session.tarotCards[0] }}</p>
+                <p v-if="session.tarotReading" class="mt-3 text-sm font-light leading-relaxed text-sketch-lineSub">
+                  {{ session.tarotReading }}
+                </p>
               </div>
+            </div>
+
+            <!-- 今日天气 + 打分（勾选天气加成时才有） -->
+            <div v-if="task?.weatherText && task.weatherScore" class="mt-5 sketch-border-l pl-3">
+              <DualTextBlock cn="今日天气" en="TODAY'S WEATHER" size="sm" weight="normal" />
+              <p class="mt-1 text-sm font-light leading-relaxed">
+                <template v-if="task.weatherCity">{{ task.weatherCity }} · </template>{{ task.weatherText }}
+              </p>
+              <p class="mt-1 text-sm font-light text-sketch-lineSub">
+                当时给天气的打分：<span class="font-en">{{ task.weatherScore }}</span><span class="font-en">/10</span>
+              </p>
             </div>
           </SketchBorder>
 

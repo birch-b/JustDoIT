@@ -29,6 +29,21 @@ export interface TaskCreateReq {
   enableTarot: boolean;        // 塔罗牌（抽 1 张）
   enableAnswerBook: boolean;   // 答案之书
   extraContext?: string;       // 补充条件（可选，一句话描述不全时补充背景/约束）
+  enableWeather?: boolean;     // 今日天气加成（勾选后先查天气再打分）
+  weatherCity?: string | null; // 天气·城市
+  weatherText?: string | null; // 天气·摘要
+  weatherScore?: number | null; // 对今日天气的打分 1-10
+}
+
+// 实时天气（GET /api/agent/weather 返回，未勾选天气时不涉及）
+export interface WeatherInfo {
+  city: string;
+  weatherDesc: string;
+  tempC: string;
+  feelsLikeC: string;
+  humidity: string;
+  windText: string;
+  summary: string;
 }
 
 // 待办项
@@ -54,8 +69,12 @@ export interface AgentSessionRes {
   taroCard?: string;
   /** 塔罗牌（单张，如 "愚人 · 正位"） */
   tarotCards?: string[];
+  /** 塔罗牌一句话解析（LLM 结合任务生成） */
+  tarotReading?: string;
   /** 答案之书的回答 */
   answerBook?: string;
+  /** 答案之书一句话解读（LLM 顺着随机答案的意象圆回结论） */
+  answerBookReading?: string;
   historySummary: string;
 }
 

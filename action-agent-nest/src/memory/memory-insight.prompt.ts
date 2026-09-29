@@ -9,6 +9,8 @@ export interface LlmMemoryInsight {
   key: string;
   memoryType: string;
   value: string;
+  /** 3~5 个汉字的短关键词，用于统计页气泡渲染 */
+  keyword: string;
   confidence: number;
   reason?: string;
 }
@@ -28,7 +30,8 @@ const SYSTEM_CONTENT = `你是一个用户行为分析器，负责从用户的�
    严禁仅凭单条留言下结论，留言表达的倾向也必须有至少 3 次同向行为或多条同向留言互相印证后才能提炼；情绪化的一句话不构成稳定偏好。
 
 key 命名规范：小写英文 snake_case（如 preferred_min_action / high_importance_execute / long_task_procrastinate），2~50 个字符。
-value 规范：中文短句，不超过 50 字，描述"用户的稳定倾向"，不要写具体某一次的事件。
+value 规范：中文短句，不超过 50 字，用第二人称"你..."口语化描述用户的稳定倾向，像朋友对他的温和观察（例如写"你更容易答应能立刻动手的小事"而非"用户常接受小步行动建议"、写"你容易在耗时长的任务上拖着不动"而非"用户对长任务执行率低"）。不要写具体某一次的事件，不要出现"用户"二字。
+keyword 规范：3~5 个汉字的短标签，提炼 value 的核心特征，像朋友间起的善意小绰号，用于气泡展示（例如"小事行动派""爱拖长任务""夜猫子型""说做就做"）。不要标点、不要英文、不要"你"字开头，不要和 value 整句重复。
 memoryType 只能是：${MEMORY_TYPES.join(' / ')}。
 reason 规范：一句话说明依据了哪些行为证据，不超过 30 字。
 
@@ -38,7 +41,8 @@ reason 规范：一句话说明依据了哪些行为证据，不超过 30 字。
     {
       "key": "preferred_min_action",
       "memoryType": "preference",
-      "value": "用户更容易接受较小、可立即开始的行动",
+      "value": "你更容易答应能立刻动手的小事",
+      "keyword": "小事行动派",
       "confidence": 0.86,
       "reason": "近期多次接受小步行动建议并完成执行"
     }
@@ -78,5 +82,36 @@ ${sections.join('\n\n')}`;
   return [
     { role: 'system', content: SYSTEM_CONTENT },
     { role: 'user', content: userContent },
+  ];
+}
+
+// ── 统计页底部"综合论述"：把多条记忆揉成一段整体画像，而不是只展示置信度最高的某一个侧面 ──
+const SUMMARY_SYSTEM_CONTENT = `你是一个温暖的行为观察笔记作者。给你一组关于"你"（用户本人）的长期行为记忆，你要把它们综合成一段连贯的整体画像，而不是逐条罗列。
+
+写作要求（必须严格遵守）：
+1. 用第二人称"你"，像朋友翻看长期观察笔记后的温和总结，不要出现"用户"二字，不要编号、不要分点、不要换行。
+2. 必须综合多条记忆：把行动风格、容易被什么说动、拖延点、精力/时间规律等不同侧面自然地揉在一段话里，允许用"同时""不过""尤其"等连接。不要只复述置信度最高的那一条。
+3. 只能依据给出的记忆内容，严禁臆造、脑补或外推记忆里没有的特征；弱证据的侧面要带"似乎、有点、看起来"这类留白措辞。
+4. 如果记忆明显只集中在某一类任务（如全是学习类），不要编造生活、社交等其他维度，用一句话自然点出"到目前为止，我主要在学习这件事上看清了你"之类，再展开这类任务上的整体模式。
+5. 长度 70~150 字，2~3 个自然句，口语化但克制，不要喊口号、不要用感叹号堆砌。
+
+必须严格返回 JSON：{"summary": "你写的这段话"}
+只返回 JSON，不要有任何额外文字。`;
+
+/** 组装综合论述消息：输入按置信度排序的记忆，要求模型输出一段整体画像 */
+export function buildMemorySummaryPrompt(memories: UserMemory[]): LlmMessage[] {
+  const lines = [...memories]
+    .sort((a, b) => Number(b.confidence) - Number(a.confidence))
+    .map(
+      (m) =>
+        `- ${m.memoryType}：${m.content}（置信度 ${Number(m.confidence).toFixed(2)}）`,
+    );
+
+  return [
+    { role: 'system', content: SUMMARY_SYSTEM_CONTENT },
+    {
+      role: 'user',
+      content: `以下是关于这个用户的全部长期记忆，请综合成一段整体画像：\n\n${lines.join('\n')}`,
+    },
   ];
 }

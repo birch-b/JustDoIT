@@ -33,6 +33,10 @@ export class UserMemory {
   @Column({ type: 'varchar', length: 500 })
   content: string;
 
+  /** 3~5 字短关键词，仅用于统计页气泡渲染；3.5 由 LLM 提炼、3.4 随模板生成，老数据可为空 */
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  keyword: string | null;
+
   /** 3.5 LLM 提炼记忆的稳定键（snake_case，如 preferred_min_action），按此 upsert；手动/3.4 受管记忆为 null */
   @Column({ type: 'varchar', length: 50, nullable: true })
   memoryKey: string | null;
