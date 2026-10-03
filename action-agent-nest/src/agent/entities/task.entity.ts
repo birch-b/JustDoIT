@@ -72,6 +72,18 @@ export class Task {
   @Column({ type: 'int', nullable: true })
   weatherScore: number | null;
 
+  /** 消费购物·商品价格（元，可空） */
+  @Column({ type: 'int', nullable: true })
+  itemPrice: number | null;
+
+  /** 消费购物·钱包余额（元，可空） */
+  @Column({ type: 'int', nullable: true })
+  walletBalance: number | null;
+
+  /** 消费购物·钱包宽裕度 1-10（越低越吃紧） */
+  @Column({ type: 'int', nullable: true })
+  walletScore: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

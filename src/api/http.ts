@@ -56,3 +56,20 @@ export async function authRequest<T>(
   }
   return data as T;
 }
+
+/**
+ * 是否为可重试的临时故障：网络断开/后端重启中（fetch 直接 reject）。
+ * 401（UnauthorizedError）与业务错误不重试。
+ */
+export function isNetworkError(e: unknown): boolean {
+  return (
+    e instanceof Error &&
+    !(e instanceof UnauthorizedError) &&
+    e.message.includes("无法连接服务器")
+  );
+}
+
+/** 简单延时，用于失败后短暂等待再重试 */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

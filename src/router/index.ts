@@ -34,6 +34,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: "个人统计 | Stats", requiresAuth: true },
   },
   {
+    path: "/keywords",
+    name: "keywords",
+    component: () => import("@/views/MemoryKeywords.vue"),
+    meta: { title: "关键词汇总 | Keywords", requiresAuth: true },
+  },
+  {
     path: "/login",
     name: "login",
     component: () => import("@/views/Login.vue"),

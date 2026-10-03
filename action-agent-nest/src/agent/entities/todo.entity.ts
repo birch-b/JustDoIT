@@ -39,6 +39,10 @@ export class Todo {
   @Column({ type: 'boolean', default: false })
   done: boolean;
 
+  /** 是否已归档（仅对已完成待办有意义；归档后不在计划表显示，数据保留） */
+  @Column({ type: 'boolean', default: false })
+  archived: boolean;
+
   /** 关联的会话ID（可空——也可手动添加待办） */
   @Column({ type: 'int', nullable: true })
   sessionId: number | null;

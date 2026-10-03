@@ -35,6 +35,7 @@ const links = [
   { to: "/", cn: "首页", en: "Home" },
   { to: "/task-create", cn: "新的纠结", en: "New" },
   { to: "/stats", cn: "统计", en: "Stats" },
+  { to: "/keywords", cn: "关键词", en: "Keywords" },
 ];
 
 const authLinks = [

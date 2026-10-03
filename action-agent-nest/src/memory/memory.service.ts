@@ -27,6 +27,7 @@ export class MemoryService {
       userId,
       memoryType: dto.memoryType,
       content: dto.content,
+      keyword: dto.keyword?.trim() || null,
       confidence: dto.confidence ?? 0.5,
     });
     return this.memoryRepo.save(memory);
@@ -37,6 +38,7 @@ export class MemoryService {
     const memory = await this.findOwned(userId, id);
     if (dto.memoryType !== undefined) memory.memoryType = dto.memoryType;
     if (dto.content !== undefined) memory.content = dto.content;
+    if (dto.keyword !== undefined) memory.keyword = dto.keyword.trim() || null;
     if (dto.confidence !== undefined) memory.confidence = dto.confidence;
     return this.memoryRepo.save(memory);
   }

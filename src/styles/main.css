@@ -51,6 +51,23 @@
     filter: drop-shadow(0 0 1px theme("colors.sketch.line"));
   }
 
+  /* 日期输入框：去掉原生日历图标，换成手绘日历图标（与波浪线共存） */
+  input[type="datetime-local"].sketch-datetime::-webkit-calendar-picker-indicator {
+    opacity: 0;            /* 隐藏原生图标但保留点击区域 */
+    cursor: pointer;
+    position: relative;
+    z-index: 1;
+  }
+  input[type="datetime-local"].sketch-datetime {
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%23634442' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='3' width='12' height='11' rx='2' ry='2'/%3E%3Cline x1='2' y1='7' x2='14' y2='7'/%3E%3Cline x1='6' y1='1' x2='6' y2='5'/%3E%3Cline x1='10' y1='1' x2='10' y2='5'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 8'%3E%3Cpath d='M0,5 C15,3.5 45,6.5 60,5' fill='none' stroke='%23634442' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat, repeat-x;
+    background-position: right 0.5rem center, bottom;
+    background-size: 16px 16px, 60px 8px;
+    padding-right: 1.8rem;
+  }
+
   /* 自定义滑块：手绘波浪轨道 + 方框滑块 */
   .sketch-range {
     @apply w-full appearance-none bg-transparent cursor-pointer;

@@ -15,9 +15,14 @@ export interface TodoCreateReq {
 }
 
 export const todoApi = {
-  /** GET /todos：当前用户全部待办 */
+  /** GET /todos：当前用户未归档待办 */
   list(): Promise<TodoItem[]> {
     return authRequest<TodoItem[]>(`${BASE_URL}`);
+  },
+
+  /** GET /todos/archived：归档列表 */
+  listArchived(): Promise<TodoItem[]> {
+    return authRequest<TodoItem[]>(`${BASE_URL}/archived`);
   },
 
   /** POST /todos：新增待办 */
@@ -36,14 +41,21 @@ export const todoApi = {
     });
   },
 
-  /** DELETE /todos/:id：删除单条 */
+  /** PATCH /todos/:id/archive：归档单条 */
+  archive(id: number): Promise<TodoItem> {
+    return authRequest<TodoItem>(`${BASE_URL}/${id}/archive`, {
+      method: "PATCH",
+    });
+  },
+
+  /** DELETE /todos/:id：移出计划表（物理删除 todo，关联 session 不受影响） */
   remove(id: number): Promise<{ success: boolean }> {
     return authRequest<{ success: boolean }>(`${BASE_URL}/${id}`, {
       method: "DELETE",
     });
   },
 
-  /** DELETE /todos/clear-done：一键清除已完成 */
+  /** DELETE /todos/clear-done：归档全部已完成 */
   clearDone(): Promise<{ success: boolean }> {
     return authRequest<{ success: boolean }>(`${BASE_URL}/clear-done`, {
       method: "DELETE",

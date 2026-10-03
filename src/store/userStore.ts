@@ -8,8 +8,8 @@ export interface UserInfo {
   id?: number;
   username: string;
   email: string;
-  bio?: string;       // 后端暂无此字段，本地维护
-  createdAt?: string; // 后端注册/登录响应未返回，展示时容错
+  bio?: string;        // 后端 user.bio，空串代表未设置（展示时由页面给占位文案）
+  createdAt?: string | null; // 后端注册时间 ISO 串
 }
 
 interface State {
@@ -19,7 +19,6 @@ interface State {
 }
 
 const CURRENT_KEY = "jdi_current_user";
-const DEFAULT_BIO = "这个人很懒，什么都没留下。";
 /** 登录滑动过期时长：连续 24 小时未进入系统则登录过期，需重新登录 */
 const IDLE_EXPIRE_MS = 24 * 60 * 60 * 1000;
 
@@ -109,7 +108,8 @@ export const useUserStore = defineStore("user", {
         id: res.user.id,
         username: res.user.username,
         email: res.user.email,
-        bio: DEFAULT_BIO,
+        bio: res.user.bio ?? "",
+        createdAt: res.user.createdAt ?? null,
       };
       this.token = res.token;
       this.currentUser = user;
@@ -159,21 +159,29 @@ export const useUserStore = defineStore("user", {
     },
 
     /**
-     * 更新个人资料
-     * 注意：后端暂无资料更新接口，bio 等修改仅在本地生效，
-     * 用户名/邮箱本地修改不会同步到后端（下次登录恢复为后端数据）
+     * 更新个人资料：PATCH /api/user/profile
+     * 后端做 username/email 唯一性校验，成功后用返回值同步本地 currentUser
      */
-    updateProfile(payload: {
+    async updateProfile(payload: {
       username?: string;
       email?: string;
       bio?: string;
-    }): { ok: boolean; msg: string } {
+    }): Promise<{ ok: boolean; msg: string }> {
       if (!this.currentUser) return { ok: false, msg: "未登录" };
-
-      const updated: UserInfo = { ...this.currentUser, ...payload };
-      this.currentUser = updated;
-      this.persistAuth();
-      return { ok: true, msg: "资料已更新（本地生效）" };
+      try {
+        const res = await userApi.updateProfile(payload);
+        // 用后端返回值同步本地，确保与 DB 一致
+        this.currentUser = {
+          ...this.currentUser,
+          ...res.user,
+          bio: res.user.bio ?? "",
+          createdAt: res.user.createdAt ?? null,
+        };
+        this.persistAuth();
+        return { ok: true, msg: "资料已更新" };
+      } catch (e) {
+        return { ok: false, msg: (e as Error).message };
+      }
     },
   },
 });

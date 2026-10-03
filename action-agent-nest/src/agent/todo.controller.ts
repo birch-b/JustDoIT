@@ -26,6 +26,12 @@ export class TodoController {
     return this.todoService.list(userId);
   }
 
+  /** 归档列表：仅返回已完成且已归档的待办 */
+  @Get('archived')
+  listArchived(@GetUser('userId') userId: number) {
+    return this.todoService.listArchived(userId);
+  }
+
   @Post()
   create(@GetUser('userId') userId: number, @Body() dto: CreateTodoDto) {
     return this.todoService.create(userId, dto);
@@ -40,11 +46,22 @@ export class TodoController {
     return this.todoService.update(userId, id, dto);
   }
 
+  /** 归档单条 */
+  @Patch(':id/archive')
+  archive(
+    @GetUser('userId') userId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.todoService.archive(userId, id);
+  }
+
+  /** 归档全部已完成（原「一键清除」改为归档而非删除） */
   @Delete('clear-done')
   clearDone(@GetUser('userId') userId: number) {
     return this.todoService.clearDone(userId);
   }
 
+  /** 移出计划表：物理删除 todo 记录 */
   @Delete(':id')
   remove(
     @GetUser('userId') userId: number,

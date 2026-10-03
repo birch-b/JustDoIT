@@ -51,6 +51,13 @@ export class AgentService {
     //    同一份摘要既喂给 LLM 做个性化建议，也用于结果页展示，避免重复查询。
     const historySummary = await this.buildHistorySummary(userId, dto.category);
 
+    // 0.5 取最近一次会话结论作为反向思考锚点，防止同类问题反复纠结时结论无故摇摆
+    const lastSession = await this.sessionRepo.findOne({
+      where: { task: { userId } },
+      relations: { task: true },
+      order: { createdAt: 'DESC' },
+    });
+
     // 1. 保存任务输入
     const task = this.taskRepo.create({
       userId,
@@ -69,6 +76,10 @@ export class AgentService {
       weatherCity: dto.weatherText && dto.weatherScore ? (dto.weatherCity?.trim() || null) : null,
       weatherText: dto.weatherText && dto.weatherScore ? dto.weatherText.trim() : null,
       weatherScore: dto.weatherText && dto.weatherScore ? dto.weatherScore : null,
+      // 消费购物·钱包：价格/余额可空，宽裕度仅在购物分类且有值时落库
+      itemPrice: dto.itemPrice ?? null,
+      walletBalance: dto.walletBalance ?? null,
+      walletScore: dto.walletScore ?? null,
     });
     const savedTask = await this.taskRepo.save(task);
 
@@ -94,10 +105,17 @@ export class AgentService {
       answerBook = await this.answerBookService.ask(dto.taskContent);
     }
 
-    // 4. 调 DeepSeek LLM 生成建议（带入历史行为 + 长期记忆 + 牌面 + 答案之书原文；失败时 fallback 到规则计算）
+    // 4. 调 DeepSeek LLM 生成建议（带入历史行为 + 长期记忆 + 牌面 + 答案之书原文 + 上次结论；失败时 fallback 到规则计算）
     const advice = await this.generateAdvice(dto, historySummary, memoryText, {
       tarotCard: tarotCards?.[0],
       answerBookText: answerBook ?? undefined,
+      lastSession: lastSession
+        ? {
+            taskContent: lastSession.task.taskContent,
+            category: lastSession.task.category,
+            conclusion: lastSession.conclusion,
+          }
+        : undefined,
     });
     const { agentSuggestIndex, conclusion, persuadeMode, persuadeText, minAction } = advice;
     // 解读只在勾选塔罗时有效，且必须是 LLM 真实返回的（规则兜底无解读）
@@ -134,26 +152,95 @@ export class AgentService {
 
   /** 历史会话列表（首页卡片 + 统计共用，返回完整详情数组） */
   async listSessions(userId: number) {
+    // SQL 层按 userId 过滤（关联 task 表），避免全表扫描后内存过滤
     const sessions = await this.sessionRepo.find({
+      where: { task: { userId } },
       relations: { task: true },
       order: { createdAt: 'DESC' },
     });
-    const mine = sessions.filter((s) => s.task?.userId === userId);
 
-    const records = mine.length
+    const records = sessions.length
       ? await this.recordRepo.find({
-          where: { sessionId: In(mine.map((s) => s.id)) },
+          where: { sessionId: In(sessions.map((s) => s.id)) },
         })
       : [];
 
     // 每条会话动态计算 historySummary（反映用户当前真实历史状态）
     const details = await Promise.all(
-      mine.map(async (s) => {
+      sessions.map(async (s) => {
         const dynamicSummary = await this.buildHistorySummary(userId, s.task.category);
         return this.toHistoryDetail(s, records.find((r) => r.sessionId === s.id) ?? null, dynamicSummary);
       }),
     );
     return details;
+  }
+
+  /**
+   * 统计聚合：返回用户的总数/已执行/接受率/模式分布/意愿-执行散点
+   * 用 SQL 聚合，避免前端拉全量会话后内存计算
+   */
+  async getStats(userId: number) {
+    const totalSessions = await this.sessionRepo.count({
+      where: { task: { userId } },
+    });
+
+    // 已执行数 + 接受数（仅统计有反馈的会话）
+    const recordAgg = await this.recordRepo
+      .createQueryBuilder('r')
+      .innerJoin('task_session', 's', 's.id = r.sessionId')
+      .innerJoin('task', 't', 't.id = s.taskId')
+      .where('t.userId = :userId', { userId })
+      .select('SUM(CASE WHEN r.isExecute = 1 THEN 1 ELSE 0 END)', 'executedCount')
+      .addSelect('SUM(CASE WHEN r.userAcceptSuggest = 1 THEN 1 ELSE 0 END)', 'acceptedCount')
+      .getRawOne();
+
+    const executedCount = Number(recordAgg?.executedCount ?? 0);
+    const acceptedCount = Number(recordAgg?.acceptedCount ?? 0);
+    const acceptRate = totalSessions ? Math.round((acceptedCount / totalSessions) * 100) : 0;
+
+    // 劝说模式分布
+    const modeRows = await this.sessionRepo
+      .createQueryBuilder('s')
+      .innerJoin('s.task', 't')
+      .where('t.userId = :userId', { userId })
+      .select('s.persuadeMode', 'mode')
+      .addSelect('COUNT(*)', 'cnt')
+      .groupBy('s.persuadeMode')
+      .getRawMany();
+
+    const modeDistribution: Record<string, number> = {
+      '温柔劝说模式': 0,
+      '激将模式': 0,
+      '理性分析模式': 0,
+    };
+    for (const row of modeRows) {
+      if (row.mode in modeDistribution) {
+        modeDistribution[row.mode] = Number(row.cnt);
+      }
+    }
+
+    // 意愿-执行散点：有反馈的会话才计入
+    const willRows = await this.sessionRepo
+      .createQueryBuilder('s')
+      .innerJoin('s.task', 't')
+      .innerJoin('action_record', 'r', 'r.sessionId = s.id')
+      .where('t.userId = :userId', { userId })
+      .select('t.willScore', 'willScore')
+      .addSelect('r.isExecute', 'completed')
+      .getRawMany();
+
+    const willVsComplete = willRows.map((r) => ({
+      willScore: Number(r.willScore),
+      completed: Boolean(r.completed),
+    }));
+
+    return {
+      totalSessions,
+      executedCount,
+      acceptRate,
+      modeDistribution,
+      willVsComplete,
+    };
   }
 
   /** 历史详情（校验归属） */
@@ -265,7 +352,11 @@ export class AgentService {
     dto: CreateSessionDto,
     historySummary?: string,
     memoryText?: string,
-    extras?: { tarotCard?: string; answerBookText?: string },
+    extras?: {
+      tarotCard?: string;
+      answerBookText?: string;
+      lastSession?: { taskContent: string; category: string; conclusion: string };
+    },
   ) {
     const llm = await this.llmService.generateAdvice(dto, historySummary, memoryText, extras);
     if (llm) {
@@ -528,6 +619,9 @@ export class AgentService {
         weatherCity: s.task.weatherCity,
         weatherText: s.task.weatherText,
         weatherScore: s.task.weatherScore,
+        itemPrice: s.task.itemPrice,
+        walletBalance: s.task.walletBalance,
+        walletScore: s.task.walletScore,
       },
       record: record ? this.toRecordRes(record) : null,
       createdAt: s.createdAt.toISOString(),

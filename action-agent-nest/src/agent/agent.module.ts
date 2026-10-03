@@ -8,6 +8,7 @@ import { TodoService } from './todo.service';
 import { AnswerBookService } from './answerbook.service';
 import { TarotService } from './tarot.service';
 import { WeatherService } from './weather.service';
+import { CityService } from './city.service';
 import { LlmModule } from './llm.module';
 import { MemoryModule } from '../memory/memory.module';
 import { Task } from './entities/task.entity';
@@ -26,6 +27,6 @@ import { Todo } from './entities/todo.entity';
     LlmModule,
   ],
   controllers: [AgentController, TodoController],
-  providers: [AgentService, TodoService, AnswerBookService, TarotService, WeatherService],
+  providers: [AgentService, TodoService, AnswerBookService, TarotService, WeatherService, CityService],
 })
 export class AgentModule {}

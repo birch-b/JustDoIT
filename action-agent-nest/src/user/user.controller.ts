@@ -1,10 +1,11 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Patch, Post, UseGuards } from '@nestjs/common';
 import { UserService } from './user.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { SendCodeDto } from './dto/send-code.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { GetUser } from '../common/decorators/get-user.decorator';
 //暴露接口
@@ -51,5 +52,15 @@ export class UserController {
     @Body() dto: DeleteAccountDto,
   ) {
     return this.userService.deleteAccount(userId, dto.code);
+  }
+
+  /** 更新个人资料 PATCH /api/user/profile（需登录；username/email/bio 均可选） */
+  @UseGuards(JwtAuthGuard)
+  @Patch('profile')
+  async updateProfile(
+    @GetUser('userId') userId: number,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.userService.updateProfile(userId, dto);
   }
 }

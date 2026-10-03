@@ -24,6 +24,12 @@ export class UpdateMemoryDto {
   @MaxLength(500, { message: '记忆内容最多 500 字' })
   content?: string;
 
+  /** 3~5 字短关键词；传空串可清空 */
+  @IsOptional()
+  @IsString()
+  @MaxLength(10, { message: '关键词最多 10 字' })
+  keyword?: string;
+
   @IsOptional()
   @IsNumber()
   @Min(0)

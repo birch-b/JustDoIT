@@ -19,6 +19,10 @@ export class User {
   @Column({ length: 100 })
   password: string;
 
+  /** 个人简介，可空，最大200字符 */
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  bio: string | null;
+
   /** 创建时间，自动写入 */
   @CreateDateColumn()
   createAt: Date;

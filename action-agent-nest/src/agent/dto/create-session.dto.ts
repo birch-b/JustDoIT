@@ -87,4 +87,23 @@ export class CreateSessionDto {
   @Min(1)
   @Max(10)
   weatherScore?: number | null;
+
+  /** 消费购物·商品价格（元，可选；与 walletBalance 配合计算占比） */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  itemPrice?: number | null;
+
+  /** 消费购物·钱包余额（元，可选；与 itemPrice 配合计算占比） */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  walletBalance?: number | null;
+
+  /** 消费购物·钱包宽裕度 1-10（主观评估这笔消费对钱包的压力，越低越吃紧） */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  walletScore?: number | null;
 }

@@ -13,10 +13,19 @@ export class TodoService {
     private readonly todoRepo: Repository<Todo>,
   ) {}
 
-  /** 当前用户全部待办（未完成在前，同组内新的在前） */
+  /** 当前用户未归档待办（未完成在前，同组内新的在前） */
   async list(userId: number) {
     const todos = await this.todoRepo.find({
-      where: { userId },
+      where: { userId, archived: false },
+      order: { createdAt: 'DESC' },
+    });
+    return todos.map((t) => this.toRes(t));
+  }
+
+  /** 归档列表：仅返回已完成且已归档的待办 */
+  async listArchived(userId: number) {
+    const todos = await this.todoRepo.find({
+      where: { userId, archived: true },
       order: { createdAt: 'DESC' },
     });
     return todos.map((t) => this.toRes(t));
@@ -47,15 +56,27 @@ export class TodoService {
     return this.toRes(saved);
   }
 
+  /** 移出计划表：物理删除 todo 记录，但关联的 session 不受影响 */
   async remove(userId: number, id: number) {
     const todo = await this.getOwned(userId, id);
     await this.todoRepo.delete(todo.id);
     return { success: true };
   }
 
-  /** 一键清除已完成 */
+  /** 归档单条（标记为已归档，数据保留） */
+  async archive(userId: number, id: number) {
+    const todo = await this.getOwned(userId, id);
+    todo.archived = true;
+    const saved = await this.todoRepo.save(todo);
+    return this.toRes(saved);
+  }
+
+  /** 归档全部已完成（原「一键清除」改为归档而非删除） */
   async clearDone(userId: number) {
-    await this.todoRepo.delete({ userId, done: true });
+    await this.todoRepo.update(
+      { userId, done: true, archived: false },
+      { archived: true },
+    );
     return { success: true };
   }
 
@@ -84,6 +105,7 @@ export class TodoService {
       category: t.category,
       deadline: t.deadline,
       done: t.done,
+      archived: t.archived,
       sessionId: t.sessionId,
       completedAt: t.completedAt ? t.completedAt.toISOString() : null,
       createdAt: t.createdAt.toISOString(),

@@ -14,6 +14,14 @@ export interface UserMemoryItem {
   updatedAt: string;
 }
 
+/** 记忆类型 → 中文标签 */
+export const MEMORY_TYPE_LABEL: Record<string, string> = {
+  preference: "偏好",
+  behavior: "行为",
+  pattern: "规律",
+  goal: "目标",
+};
+
 /** 获取当前用户的全部长期记忆（后端按更新时间倒序） */
 export function getMemories(): Promise<UserMemoryItem[]> {
   return authRequest<UserMemoryItem[]>("/api/memory");
@@ -26,4 +34,38 @@ export function getMemories(): Promise<UserMemoryItem[]> {
 export async function getMemorySummary(): Promise<string | null> {
   const data = await authRequest<{ summary: string | null }>("/api/memory/summary");
   return data?.summary ?? null;
+}
+
+/** 新建一条记忆（关键词可选；置信度不暴露，后端缺省 0.5） */
+export function createMemory(payload: {
+  memoryType: string;
+  content: string;
+  keyword?: string;
+}): Promise<UserMemoryItem> {
+  return authRequest<UserMemoryItem>("/api/memory", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** 更新一条记忆（全字段可选；关键词传空串可清空） */
+export function updateMemory(
+  id: number,
+  payload: {
+    memoryType?: string;
+    content?: string;
+    keyword?: string;
+  },
+): Promise<UserMemoryItem> {
+  return authRequest<UserMemoryItem>(`/api/memory/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** 删除一条记忆 */
+export function deleteMemory(id: number): Promise<{ success: boolean }> {
+  return authRequest<{ success: boolean }>(`/api/memory/${id}`, {
+    method: "DELETE",
+  });
 }

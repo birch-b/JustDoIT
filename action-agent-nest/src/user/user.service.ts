@@ -6,6 +6,7 @@ import * as bcrypt from 'bcryptjs';
 import { User } from './entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { VerifyCodeService } from './verify-code.service';
 import { MailService } from './mail.service';
 // 业务逻辑：
@@ -15,6 +16,7 @@ import { MailService } from './mail.service';
 // 3. sendCode：按 type（register/reset）生成验证码并发送邮件
 // 4. resetPassword：校验 reset 类型验证码，更新密码
 // 5. sendDeleteCode / deleteAccount：登录态 + delete 类型验证码注销账户
+// 6. updateProfile：登录态下更新 username/email/bio（唯一性校验）
 @Injectable()
 export class UserService {
   constructor(
@@ -24,6 +26,19 @@ export class UserService {
     private readonly verifyCodeService: VerifyCodeService,
     private readonly mailService: MailService,
   ) {}
+
+  /** 统一构造对外的 user 响应对象（不含 password） */
+  private toUserResponse(user: User) {
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      bio: user.bio ?? '',
+      createdAt: user.createAt
+        ? new Date(user.createAt).toISOString()
+        : null,
+    };
+  }
 
   /** 发送邮箱验证码：按 type 校验邮箱注册状态并下发 */
   async sendCode(dto: { email: string; type: 'register' | 'reset' }) {
@@ -81,11 +96,7 @@ export class UserService {
 
     return {
       token,
-      user: {
-        id: saved.id,
-        username: saved.username,
-        email: saved.email,
-      },
+      user: this.toUserResponse(saved),
     };
   }
 
@@ -116,11 +127,7 @@ export class UserService {
 
     return {
       token,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-      },
+      user: this.toUserResponse(user),
     };
   }
 
@@ -161,5 +168,48 @@ export class UserService {
 
     await this.userRepo.delete(userId);
     return { message: '账户已注销' };
+  }
+
+  /**
+   * 更新个人资料：登录态下修改 username/email/bio
+   * - username/email 改动时做唯一性校验
+   * - bio 允许传空串清空简介；未传字段不动原值
+   * - 返回更新后的 user（不含 password）
+   */
+  async updateProfile(userId: number, dto: UpdateProfileDto) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('用户不存在');
+    }
+
+    // username 唯一性校验（仅当传值且与原值不同时查重）
+    if (dto.username !== undefined && dto.username !== user.username) {
+      const exist = await this.userRepo.findOne({
+        where: { username: dto.username },
+      });
+      if (exist) {
+        throw new ConflictException('用户名已被占用');
+      }
+      user.username = dto.username;
+    }
+
+    // email 唯一性校验
+    if (dto.email !== undefined && dto.email !== user.email) {
+      const exist = await this.userRepo.findOne({
+        where: { email: dto.email },
+      });
+      if (exist) {
+        throw new ConflictException('邮箱已被注册');
+      }
+      user.email = dto.email;
+    }
+
+    // bio：传值就更新（包括空串），未传不动
+    if (dto.bio !== undefined) {
+      user.bio = dto.bio.trim();
+    }
+
+    const saved = await this.userRepo.save(user);
+    return { user: this.toUserResponse(saved) };
   }
 }

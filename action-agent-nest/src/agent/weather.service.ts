@@ -35,6 +35,19 @@ interface WhytaWeatherRes {
   msg?: string;
 }
 
+/** 百度逆地理编码返回（只声明用到的字段；city 个别场景为空数组或空串） */
+interface BaiduRegeoRes {
+  status: number;
+  message?: string;
+  result?: {
+    addressComponent?: {
+      country?: string;
+      province?: string;
+      city?: string | string[];
+    };
+  };
+}
+
 /** 常用城市中文名 → API 接受的英文/拼音名；不在表内的输入原样透传（接口可能本身支持中文） */
 const CITY_MAP: Record<string, string> = {
   北京: 'Beijing',
@@ -86,7 +99,8 @@ const CITY_MAP: Record<string, string> = {
 const WEATHER_DESC: Record<string, string> = {
   Sunny: '晴', Clear: '晴', 'Partly cloudy': '多云', Cloudy: '多云转阴',
   Overcast: '阴', Mist: '薄雾', Fog: '雾', 'Freezing fog': '冻雾',
-  'Patchy rain possible': '零星小雨', 'Light drizzle': '毛毛雨',
+  'Patchy rain possible': '零星小雨', 'Patchy rain nearby': '零星小雨',
+  'Light drizzle': '毛毛雨',
   'Light rain': '小雨', 'Patchy light rain': '零星小雨', 'Moderate rain': '中雨',
   'Heavy rain': '大雨', 'Torrential rain shower': '暴雨',
   'Light rain shower': '小阵雨', 'Moderate or heavy rain shower': '强阵雨',
@@ -101,7 +115,8 @@ const WEATHER_DESC: Record<string, string> = {
   'Moderate or heavy sleet showers': '强阵雨夹雪',
   'Heavy rain at times': '间歇性大雨', 'Moderate rain at times': '间歇性中雨',
   'Light rain at times': '间歇性小雨', Drizzle: '毛毛雨', 'Patchy light drizzle': '零星毛毛雨',
-  Haze: '霾',
+  Haze: '霾', 'Smoky haze': '灰霾', Smoke: '烟雾', 'Volcanic ash': '火山灰',
+  Dust: '浮尘', 'Dust storms': '沙尘暴', 'Sandstorm': '沙尘暴', 'Blowing sand': '扬沙',
 };
 
 /** 16 方位风向英文 → 中文 */
@@ -151,11 +166,57 @@ export class WeatherService {
       }
       // 接口实际返回英文描述（大小写不统一，如 "Partly Cloudy "），映射为中文；没收录的原样保留
       const descCn = WEATHER_DESC[rawDesc] ?? WEATHER_DESC[this.toTitleCase(rawDesc)] ?? rawDesc;
-      return this.normalize(d, descCn);
+      const info = this.normalize(d, descCn);
+      // 城市以用户请求的中文名为准（接口回显常是英文拼音，前端联动选择/回显都要中文）
+      info.city = raw;
+      return info;
     } catch (err) {
       this.logger.error(`天气查询失败: ${(err as Error).message}`);
       return null;
     }
+  }
+
+  /**
+   * 逆地理编码：浏览器拿到的 WGS84 经纬度 → 国内城市中文名。
+   * 用百度 reverse_geocoding，coordtype=wgs84ll 让服务端做 WGS84→BD09 转换，省掉本地坐标换算。
+   * @returns 去掉"市/地区"后缀的城市名（如"广州"）；未配 ak/海外/失败返回 null
+   */
+  async reverseGeocode(latInput: number, lngInput: number): Promise<string | null> {
+    const ak = this.configService.get<string>('map.baiduAk');
+    if (!ak) {
+      this.logger.warn('未配置 BAIDU_MAP_AK，跳过逆地理编码');
+      return null;
+    }
+    const lat = Number(latInput);
+    const lng = Number(lngInput);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < 3 || lat > 54 || lng < 73 || lng > 136) {
+      // 经纬度非法或明显不在中国范围（含海外），直接不支持
+      return null;
+    }
+
+    try {
+      const url = `https://api.map.baidu.com/reverse_geocoding/v3/?ak=${encodeURIComponent(ak)}`
+        + `&output=json&coordtype=wgs84ll&location=${lat},${lng}`;
+      const res = await fetch(url, { method: 'GET' });
+      const json = (await res.json()) as BaiduRegeoRes;
+      if (json.status !== 0 || !json.result) {
+        this.logger.warn(`百度逆地理失败 status=${json.status} msg=${json.message ?? ''}`);
+        return null;
+      }
+      const comp = json.result.addressComponent;
+      if (!comp || comp.country !== '中国') return null;
+      // 直辖市/个别省直辖单位 city 可能为空，回退取 province
+      const rawCity = (typeof comp.city === 'string' && comp.city) || comp.province || '';
+      return this.normalizeCityName(rawCity);
+    } catch (err) {
+      this.logger.error(`逆地理编码失败: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /** "广州市"→"广州"、"喀什地区"→"喀什"；自治州/盟保留原名（天气接口大概率不支持，原样透传） */
+  private normalizeCityName(raw: string): string {
+    return raw.trim().replace(/(市|地区)$/u, '');
   }
 
   /** 剥离常见外层包裹，拿到含天气字段的对象 */

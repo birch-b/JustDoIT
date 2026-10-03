@@ -8,6 +8,8 @@ import type {
   SessionCardItem,
   HistoryDetail,
   WeatherInfo,
+  CityGroup,
+  StatsData,
 } from "@/types";
 import { authRequest } from "./http";
 
@@ -40,6 +42,11 @@ export const agentApi = {
   /** 历史会话列表：GET /agent/sessions（需登录，返回完整详情数组用于卡片+统计） */
   listSessions(): Promise<HistoryDetail[]> {
     return authRequest<HistoryDetail[]>(`${BASE_URL}/sessions`);
+  },
+
+  /** 统计聚合：GET /agent/stats（需登录，后端聚合避免前端拉全量） */
+  getStats(): Promise<StatsData> {
+    return authRequest<StatsData>(`${BASE_URL}/stats`);
   },
 
   /** 提交行为反馈：POST /agent/action/record（需登录） */
@@ -120,6 +127,36 @@ export const agentApi = {
       return null;
     }
   },
+
+  /**
+   * 自动定位查天气：GET /api/agent/weather?lat=&lng=
+   * 浏览器 WGS84 经纬度 → 后端百度逆地理转城市 → whyta 天气；任一环失败返回 null
+   */
+  async fetchWeatherByCoords(lat: number, lng: number): Promise<WeatherInfo | null> {
+    try {
+      const res = await fetch(`/api/agent/weather?lat=${lat}&lng=${lng}`);
+      if (!res.ok) return null;
+      const data = (await res.json()) as { code: number; data: WeatherInfo | null };
+      return data?.data ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * 全国城市列表（省→市两级）：GET /api/agent/cities
+   * mxnzp 凭证缺失/第三方失败时返回 null，调用方回退内置城市
+   */
+  async fetchCityGroups(): Promise<CityGroup[] | null> {
+    try {
+      const res = await fetch("/api/agent/cities");
+      if (!res.ok) return null;
+      const data = (await res.json()) as { code: number; data: CityGroup[] | null };
+      return Array.isArray(data?.data) && data.data.length > 0 ? data.data : null;
+    } catch {
+      return null;
+    }
+  },
 };
 
 /** 首页卡片列表由 HistoryDetail[] 映射得到 */
@@ -127,6 +164,7 @@ export function toCardItem(d: HistoryDetail): SessionCardItem {
   return {
     sessionId: d.session.sessionId,
     taskContent: d.task.taskContent,
+    category: d.task.category,
     agentSuggestIndex: d.session.agentSuggestIndex,
     conclusion: d.session.conclusion,
     persuadeMode: d.session.persuadeMode,

@@ -4,6 +4,7 @@ import { defineStore } from "pinia";
 import type { TodoItem, TaskCategory, ActionRecordReq } from "@/types";
 import { todoApi, type TodoCreateReq } from "@/api/todoApi";
 import { agentApi } from "@/api/agentApi";
+import { isNetworkError, sleep } from "@/api/http";
 import { useUserStore } from "./userStore";
 import { useAgentStore } from "./agentStore";
 
@@ -11,13 +12,19 @@ const LEGACY_STORAGE_KEY = "jdi_todos";
 
 interface State {
   list: TodoItem[];
+  /** 归档记录（已完成且已归档，与 list 分离避免 getter 冲突） */
+  archivedItems: TodoItem[];
   loaded: boolean;
+  /** 最近一次加载是否失败（网络故障），供页面显示重试 */
+  loadError: boolean;
 }
 
 export const useTodoStore = defineStore("todo", {
   state: (): State => ({
     list: [],
+    archivedItems: [],
     loaded: false,
+    loadError: false,
   }),
   getters: {
     pendingList(state) {
@@ -27,7 +34,13 @@ export const useTodoStore = defineStore("todo", {
     },
     doneList(state) {
       return state.list
-        .filter((t) => t.done)
+        .filter((t) => t.done && !t.archived)
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    },
+    /** 归档记录（已完成且已归档，独立数组） */
+    archivedList(state) {
+      return state.archivedItems
+        .slice()
         .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
     },
     pendingCount(state) {
@@ -38,24 +51,41 @@ export const useTodoStore = defineStore("todo", {
     /** 登出时清空内存（数据都在后端） */
     resetTodos() {
       this.list = [];
+      this.archivedItems = [];
       this.loaded = false;
+      this.loadError = false;
     },
 
-    /** 拉取后端待办；未登录直接清空 */
+    /**
+     * 拉取后端待办；未登录直接清空。
+     * 网络故障自动等待重试两次；最终失败保留旧数据并置 loadError，
+     * 不再把「连不上服务器」误显示成「还没有待办」。
+     */
     async loadTodos(): Promise<void> {
       const userStore = useUserStore();
       if (!userStore.isLoggedIn) {
         this.resetTodos();
         return;
       }
-      try {
-        const list = await todoApi.list();
-        this.list = list ?? [];
-        this.loaded = true;
-        // 旧版本 localStorage 待办：按 sessionId/内容去重后迁移
-        await this.migrateLegacyTodos(this.list);
-      } catch {
-        this.list = [];
+      this.loadError = false;
+      const delays = [700, 1500];
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const list = await todoApi.list();
+          this.list = list ?? [];
+          this.loaded = true;
+          // 旧版本 localStorage 待办：按 sessionId/内容去重后迁移
+          await this.migrateLegacyTodos(this.list);
+          this.loadError = false;
+          return;
+        } catch (e) {
+          if (isNetworkError(e) && attempt < delays.length) {
+            await sleep(delays[attempt]);
+            continue;
+          }
+          this.loadError = true;
+          return;
+        }
       }
     },
 
@@ -159,7 +189,7 @@ export const useTodoStore = defineStore("todo", {
       }
     },
 
-    /** 删除单条 */
+    /** 移出计划表：物理删除 todo，关联 session 不受影响 */
     async removeTodo(id: number): Promise<void> {
       const prev = this.list;
       this.list = this.list.filter((t) => t.id !== id);
@@ -170,14 +200,41 @@ export const useTodoStore = defineStore("todo", {
       }
     },
 
-    /** 一键清除已完成 */
-    async clearDone(): Promise<void> {
+    /** 归档单条：从 list 移到 archivedItems */
+    async archiveTodo(id: number): Promise<void> {
+      const item = this.list.find((t) => t.id === id);
+      if (!item) return;
       const prev = this.list;
-      this.list = this.list.filter((t) => !t.done);
+      this.list = this.list.filter((t) => t.id !== id);
+      try {
+        const updated = await todoApi.archive(id);
+        this.archivedItems.unshift(updated);
+      } catch {
+        this.list = prev; // 失败回滚
+      }
+    },
+
+    /** 归档全部已完成：list 中已完成项移到 archivedItems */
+    async clearDone(): Promise<void> {
+      const prevList = this.list;
+      const prevArchived = this.archivedItems;
+      const toArchive = this.list.filter((t) => t.done && !t.archived);
+      this.list = this.list.filter((t) => !(t.done && !t.archived));
+      this.archivedItems = [...toArchive, ...this.archivedItems];
       try {
         await todoApi.clearDone();
       } catch {
-        this.list = prev;
+        this.list = prevList;
+        this.archivedItems = prevArchived;
+      }
+    },
+
+    /** 拉取归档记录 */
+    async loadArchived(): Promise<void> {
+      try {
+        this.archivedItems = (await todoApi.listArchived()) ?? [];
+      } catch {
+        this.archivedItems = [];
       }
     },
   },

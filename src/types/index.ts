@@ -24,7 +24,7 @@ export interface TaskCreateReq {
   energyScore: number;
   importance: number;
   expectCostMin?: number | null;  // 可空
-  deadline?: string | null;        // 可空
+  deadline: string | null;         // 可空（null = 未设置）
   location: string;
   enableTarot: boolean;        // 塔罗牌（抽 1 张）
   enableAnswerBook: boolean;   // 答案之书
@@ -33,6 +33,9 @@ export interface TaskCreateReq {
   weatherCity?: string | null; // 天气·城市
   weatherText?: string | null; // 天气·摘要
   weatherScore?: number | null; // 对今日天气的打分 1-10
+  itemPrice?: number | null; // 消费购物·商品价格（元）
+  walletBalance?: number | null; // 消费购物·钱包余额（元）
+  walletScore?: number | null; // 消费购物·钱包宽裕度 1-10
 }
 
 // 实时天气（GET /api/agent/weather 返回，未勾选天气时不涉及）
@@ -46,6 +49,12 @@ export interface WeatherInfo {
   summary: string;
 }
 
+// 省→市分组（GET /api/agent/cities 返回，第三方失败时前端回退内置城市）
+export interface CityGroup {
+  name: string;   // 省份展示名，如"河北""内蒙古"
+  cities: string[];
+}
+
 // 待办项
 export interface TodoItem {
   id: number;
@@ -53,6 +62,8 @@ export interface TodoItem {
   category: TaskCategory;
   deadline?: string | null;
   done: boolean;
+  /** 是否已归档（仅对已完成有意义；归档后不在计划表显示，数据保留） */
+  archived: boolean;
   sessionId?: number | null;
   completedAt?: string | null;
   createdAt: string;
@@ -107,6 +118,7 @@ export interface ActionRecord extends ActionRecordReq {
 export interface SessionCardItem {
   sessionId: number;
   taskContent: string;
+  category: TaskCategory;
   agentSuggestIndex: number;
   conclusion: string;
   persuadeMode: PersuadeMode;

@@ -1,6 +1,6 @@
 # HANDOFF - JUST DO IT（今日行动师）交接文档
 
-> 更新时间：2026-09-29
+> 更新时间：2026-10-03
 
 决策辅助应用：帮助纠结的用户做「做不做」的决定。Vue3 前端 + NestJS 后端（**DeepSeek LLM 生成行动建议** + 答案之书/塔罗牌第三方 API）。
 
@@ -34,7 +34,7 @@
 
 2026-09-23 **登录滑动过期**（前端本地改动待提交）：连续 24 小时未进入系统自动清除登录态踢回登录页；详见下文「前端数据层」。
 
-2026-09-29 **今日天气加成 + 神秘加成都由主 LLM 统一解读 + 记忆综合论述**（本地改动待提交）：
+2026-09-29 **今日天气加成 + 神秘加成都由主 LLM 统一解读 + 记忆综合论述**（commit `75280d8` 已推送）：
 - 新增第三个神秘加成**「今日天气」**：城市下拉（44 个常用城市，localStorage 记住上次选择）→ `GET /agent/weather`（whyta.cn 我的天气，中文城市内置映射表）→ 天气卡 + **1-10 感受滑块**；天气摘要/城市/打分落 task 表三列并注入 prompt（system 第 9 条规则：低分共情降门槛、户外任务提示天气成本、纯室内任务不强行谈天气）。**WEATHER_API_KEY（whyta）已实测可用**：接口返回英文描述（且大小写不统一如 `Partly Cloudy `），服务端用 WEATHER_DESC 表翻译（toTitleCase 归一大小写），实测 `/api/agent/weather?city=武汉` → `多云 · 25℃（体感26℃） · 湿度65% · 西北风 9km/h`；无 key/失败时接口返回 data:null、前端优雅兜底不阻塞提交
 - **塔罗牌一句话解读**：牌面提前抽好注入主 prompt，主 LLM 同一次回答里输出 `tarotReading`（≤40字，与结论同向），不再独立调一次 LLM
 - **答案之书改为"随机原文 + LLM 圆场"**：uapis.cn 随机答案**照调照显示**（保留随机感），原文注入主 prompt，主 LLM 输出 `answerBookReading` 顺着意象把矛盾圆回结论（同向呼应、反向转换视角化解）；规则兜底时无解读
@@ -42,7 +42,21 @@
 - user_memory 加 `keyword varchar(10)`（3.5 prompt 要求返回 3-5 字汉字关键词，`/^[\u4e00-\u9fa5]{3,5}$/`）；3.4 模板记忆带类别前缀关键词
 - 修复 3.5 Dice 相似度去重 bug：同 key（existingKeys 内）豁免相似度检查，避免 LLM 复用 key 改写老记忆时被误判重复丢弃
 
-2026-09-24 **反馈二次对话 + 补充条件 + 关键词汇总**（本地改动待提交）：
+2026-09-30 **天气定位 + 全国城市 + 手绘控件统一 + 加载失败重试**（本地改动待提交）：
+- 天气城市改为**省/市两级联动下拉**（`GET /agent/cities`，mxnzp 全国行政区划接口，31 省 341 地级市，`city.service.ts` 清洗：直辖市"市辖区"归一为省名、港澳台剔除、内存缓存 24h）；另加 **📍自动定位**：浏览器 WGS84 经纬度 → 百度逆地理 `reverse_geocoding/v3`（`coordtype=wgs84ll` 服务端转坐标系，免转换代码；直辖市 city 为空时回退 province）→ 城市名走原天气链路；定位失败回退手动下拉，不阻塞提交。配置 `BAIDU_MAP_AK` / `MXNZP_APP_ID` / `MXNZP_APP_SECRET`（**.env 不入库**）
+- 自绘 **SketchSelect**（手绘下划线触发区 + 方形奶米弹层 + 薄荷高亮，替换原生 select 白底蓝高亮）与 **SketchDatePicker**（手绘日历：月导航/周表头/选中薄荷底/今天浅薄荷底/时分下拉/清除+确定，替换原生 datetime-local 系统弹层）
+- **前端加载失败不再误显示空状态**：`http.ts` 新增 `isNetworkError`/`sleep`；agentStore/todoStore/MemoryKeywords/Stats 加载遇「无法连接服务器」自动 0.7s/1.5s 重试两次，最终失败置 `loadError` 并显示「重新加载」按钮（首页/关键词页），**不再清空缓存、不再误显示「还没有记录」**
+- MemoryKeywords 页：关键词卡限宽 `max-w-2xl` 左对齐、编辑/删除按钮右移 8px、正文与标签左对齐（pl-2）、内容容器去 mx-auto 与标题左对齐
+
+2026-10-01 **用户资料更新接口 + 统计聚合 + 计划表重构**（本地待提交）：
+- **P1.3 用户资料更新**：user 表加 `bio varchar(200) nullable`；`PATCH /user/profile`（JWT）支持 username/email/bio 更新，唯一冲突查重；login/register 响应统一 `toUserResponse` 返回 bio/createdAt；前端 Profile 编辑改真实调用
+- **P2 统计聚合**：`GET /agent/stats`（JWT）SQL 层聚合 totalSessions/executedCount/acceptRate/modeDistribution/willVsComplete；`GET /agent/sessions` 改为 SQL 层 `where: { task: { userId } }` 过滤（不再全表扫描内存过滤）；前端 Stats/Profile 页改用 `loadStats()` 不再拉全量会话
+- **P3 关键词汇总页**：`/keywords` 路由 + MemoryKeywords.vue——墨圈气泡展示全部关键词（去重、不按置信度区分颜色）、记忆卡片列表（类型标签+关键词chip+洞察）、手动新增/编辑/删除（SketchConfirmDialog 确认）；memory DTO 加 keyword 字段支持增改
+- **历史会话分类抽屉**：Dashboard 历史会话按 category 分组成可折叠抽屉（固定顺序 work/study/life/shopping/health/social/other），刷新时全部折叠，点组头展开
+- **计划表重构**：已完成区域按分类折叠抽屉（默认全折叠）；「一键清除」改为「归档已完成」（todo 表加 `archived boolean`，`GET /todos/archived` 查归档、`PATCH /todos/:id/archive` 单条归档、`DELETE /todos/clear-done` 批量归档）；所有删除按钮改「移出计划表」确认弹窗（提示可从历史会话重新加入）；底部「归档记录」折叠区可查看已归档待办
+- **消费购物钱包评估**（仅 shopping 分类显示）：商品价格 + 钱包余额（自动算占比）+ 钱包宽裕度 1-10 滑块，落 task 表 `itemPrice/walletBalance/walletScore` 三列并注入 prompt（分数越低钱包压力越大）
+- **LLM 回答质量优化（A+B+C）**：system prompt 新增第 4 条【数据先行】（结论必须能从用户数据推导、严禁编造数字、估算展示计算过程）、第 5 条【直接回答】（问具体数量必须给数字、minAction 落到该数字）、第 6 条【钱包约束】（walletScore≤3 建议金额不超过缺口 1.5 倍、≤2 建议砍非必需项）、第 7 条【结论一致性】（同类问题方向与上次一致，改口需说明理由）；createSession 查询最近一次会话作为 lastSession 注入 prompt
+- **塔罗牌详情前端展示回退**：曾加 tarotCardDetail（牌面图/keywords/description）后用户反馈难看，已回退为仅牌名+正逆位+LLM 解读，DB 列已删除
 - 反馈区支持**可选评论**；用户点接受/拒绝（+ 是否入计划表 + 评论）打包后，后端**第二次调用 DeepSeek** 生成一句 Agent 回应，评论与回应均持久化；这是纯聊天回应，**不触发任何记忆更新**（一个会话仍只在反馈时更新一次记忆）
 - 任务可填**补充条件**（extraContext，一句话描述不全时的背景/约束，留空为空，prompt 有填写才注入）
 - 接受建议不再自动入计划表，改为先询问（吃饭/出门这类即时决定可不入表）
@@ -54,13 +68,18 @@
 |---|---|
 | 用户注册/登录（JWT，用户名或邮箱均可登录） | ✅ 真实接口 |
 | 邮箱验证码（注册 / 找回密码 / 注销账户，QQ 邮箱 SMTP） | ✅ |
+| **用户资料更新**（username/email/bio） | ✅ `PATCH /user/profile`，前端真实调用 |
 | Agent 会话创建/列表/详情/历史/反馈/删除 | ✅ 真实接口 |
-| 计划表待办 CRUD + 「接受→执行」回写 | ✅ 真实接口 |
+| **统计聚合** | ✅ `GET /agent/stats`，SQL 层聚合 |
+| 计划表待办 CRUD + 「接受→执行」回写 | ✅ 真实接口；已完成支持归档（非删除），数据保留 |
 | 答案之书 / 塔罗牌（单张，含 LLM 一句话解读） | ✅ 第三方真实接口，失败本地兜底 |
-| **今日天气加成**（城市下拉 → 实时天气 + 1-10 打分 → 注入 prompt） | ✅ whyta.cn，key 待激活，无 key 优雅兜底 |
+| **今日天气加成**（省市联动下拉 / 📍自动定位 → 实时天气 + 1-10 打分 → 注入 prompt） | ✅ whyta.cn + mxnzp + 百度地图，失败优雅兜底 |
+| **消费购物钱包评估**（商品价格/余额/宽裕度 → 注入 prompt） | ✅ 仅 shopping 分类显示 |
 | 记忆综合论述（统计页 LLM 整体画像） | ✅ `/memory/summary`，30 分钟缓存 |
-| 统计页（前端基于会话列表计算，lieflat 风纯 SVG 图表） | ✅ |
-| **DeepSeek LLM 大模型建议** | ✅ **已接入**：LLM 生成指数/结论/劝说/最小行动，失败自动降级规则引擎 |
+| 关键词汇总页（记忆 CRUD） | ✅ `/keywords`，支持增删改 |
+| 历史会话分类折叠抽屉 | ✅ 按 category 分组，默认全折叠 |
+| 统计页（前端基于聚合接口，lieflat 风纯 SVG 图表） | ✅ |
+| **DeepSeek LLM 大模型建议** | ✅ **已接入**：LLM 生成指数/结论/劝说/最小行动，失败自动降级规则引擎；含数据先行/直接回答/钱包约束/结论一致性约束 |
 | **用户长期记忆 Memory（第三步）** | ✅ 表 + CRUD + Prompt 注入 + 行为反馈更新（3.4）+ LLM 提炼（3.5） |
 
 ⚠️ 后端需要时在 `action-agent-nest` 目录执行 `npm run start:dev`（端口 3000）。
@@ -76,7 +95,8 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | POST | `/agent/session/create` | 创建会话：存任务 → 算指数/劝说模式 → 神秘加成 → 存会话 |
-| GET | `/agent/sessions` | 当前用户历史列表（含 task + record，动态 historySummary） |
+| GET | `/agent/sessions` | 当前用户历史列表（含 task + record，动态 historySummary）；SQL 层按 userId 过滤（2026-10-01 修复踩坑 11） |
+| GET | `/agent/stats` | 统计聚合（totalSessions/executedCount/acceptRate/modeDistribution/willVsComplete），SQL 层聚合（2026-10-01） |
 | GET | `/agent/session/:id` | 会话详情（校验归属） |
 | GET | `/agent/history/:id` | 历史详情（会话 + 任务输入 + 反馈 + 时间） |
 | POST | `/agent/action/record` | 行为反馈 **upsert**（按 sessionId，校验归属）；`withReply:true` 时同步二次调 LLM 生成 Agent 回应（见下） |
@@ -84,6 +104,7 @@
 | GET | `/agent/answer-book` | 公开，答案之书（uapis.cn）；createSession 内部直接调 service |
 | POST | `/agent/tarot` | 公开，塔罗抽 1 张（妖狐 API，后端另有本地兜底牌面） |
 | GET | `/agent/weather?city=武汉` | 公开，今日天气（whyta.cn），返回 `{code:0,data:WeatherInfo|null}`；未配 key/查询失败 data 为 null |
+| GET | `/agent/cities` | 公开，全国省/市两级联动数据（mxnzp，内存缓存 24h），返回 `{ provinces: [...], cityMap: {...} }` |
 
 - **LLM 建议链路**（2026-09-18 接入，DeepSeek，OpenAI 兼容接口）：
   - `llm.service.ts`：唯一负责调 DeepSeek `POST {LLM_BASE_URL}/v1/chat/completions`，model 取 `LLM_MODEL`（默认 deepseek-chat），`response_format: { type: "json_object" }`；超时/网络错/JSON 解析失败/字段非法一律 catch 返回 `null`（**LLM 故障不影响创建会话主流程**）
@@ -123,8 +144,11 @@
 
 **Todo 模块**（`src/agent/todo.controller.ts` / `todo.service.ts`，`/todos` 全部需 JWT）：
 
-- `GET /todos`、`POST /todos`、`PATCH /todos/:id`（勾选/取消，自动写 `completedAt`）
-- `DELETE /todos/:id`、`DELETE /todos/clear-done`（一键清除已完成）
+- `GET /todos`（仅未归档）、`GET /todos/archived`（归档列表）
+- `POST /todos`、`PATCH /todos/:id`（勾选/取消，自动写 `completedAt`）
+- `PATCH /todos/:id/archive`（归档单条）、`DELETE /todos/clear-done`（归档全部已完成）
+- `DELETE /todos/:id`（移出计划表，物理删除 todo 但关联 session 不受影响）
+- todo 表加 `archived boolean default false`（2026-10-01，synchronize 自动加列）
 - `deleteBySession(sessionId)` 供删会话时级联清理
 
 **User 模块**（`src/user/user.controller.ts` / `user.service.ts`）：
@@ -133,11 +157,14 @@
 |---|---|---|---|
 | POST | `/user/send-code` | 公开 | 发验证码，`type=register/reset`；注册场景校验邮箱未被占用 |
 | POST | `/user/register` | 公开 | 验证码通过后注册并**直接签发 JWT**（前端免登录） |
-| POST | `/user/login` | 公开 | username 字段支持**用户名或邮箱** |
+| POST | `/user/login` | 公开 | username 字段支持**用户名或邮箱**；响应含 `bio/createdAt` |
 | POST | `/user/reset-password` | 公开 | 忘记密码，需 reset 类型验证码 |
 | POST | `/user/send-delete-code` | JWT | 注销验证码发往绑定邮箱（type=delete） |
 | POST | `/user/delete-account` | JWT | 验证码二次确认后注销 |
+| PATCH | `/user/profile` | JWT | 更新 username/email/bio，唯一冲突查重（2026-10-01） |
 
+- user 表加 `bio varchar(200) nullable`（2026-10-01，synchronize 自动加列）
+- `toUserResponse()` 统一返回 `{ id, username, email, bio, createdAt }`；login/register/updateProfile 均走此方法
 - `verify-code.service.ts`：内存 Map 存储，三类码（register/reset/delete）互不通用；5 分钟有效、60 秒发送频控、校验成功即焚
 - `mail.service.ts`：QQ 邮箱 SMTP（`QQ_MAIL_USER` / `QQ_MAIL_AUTH_CODE`）
 
@@ -181,7 +208,7 @@
 
 **页面/组件**（`src/views/`、`src/components/`）：
 
-- `TaskCreate.vue`：分类按钮组 + 三滑块 + 可选耗时/截止/地点；神秘加成三个整行可点开关：答案之书（默认开）、塔罗（默认关，单张）、**今日天气（2026-09-29 新增，默认关）**；勾选天气展开**城市下拉**（44 个常用城市，选中即查询，localStorage key `jdi_weather_city` 记住上次选择）→ 天气卡（描述/气温/体感/湿度/风）→ **1-10 天气感受滑块**（默认 6）；查询失败显示提示但不阻塞提交（payload 不带天气字段）；**补充条件（可选）textarea**（≤500 字，纯手绘下划线样式，未填写提交空串）；提交真实接口
+- `TaskCreate.vue`：分类按钮组 + 三滑块 + 可选耗时/截止/地点；神秘加成三个整行可点开关：答案之书（默认开）、塔罗（默认关，单张）、**今日天气（2026-09-29 新增，默认关）**；勾选天气展开**省/市两级联动下拉**（`GET /agent/cities`，mxnzp 全国 341 城，省下拉选中后城市下拉联动，直辖市只有一项"北京"等）或 **📍自动定位**（浏览器经纬度 → 百度逆地理转城市名）；选中城市即查天气 → 天气卡（描述/气温/体感/湿度/风）→ **1-10 天气感受滑块**（默认 6）；localStorage key `jdi_weather_city` 记住上次城市；查询失败显示提示但不阻塞提交；**补充条件（可选）textarea**（≤500 字，纯手绘下划线样式，未填写提交空串）；提交真实接口
 - `SessionResult.vue`：**会话页与历史详情已合并为统一页**（原 `HistoryDetail.vue` 已删除）；时钟/结论/神谕（答案之书原文 + `answerBookReading` 解读灰字）/单张塔罗（牌名正逆位 + `tarotReading` 解读）/**今日天气与当时打分（2026-09-29）**/原始任务输入（含补充条件回显）/最小行动/动态历史摘要
   - **反馈区（2026-09-24 重构）**：可选评论 textarea +「✓ 我接受 / ✕ 我拒绝」；点接受**先追问**是否加入计划表（即时决定可不入表），选定后把 态度+是否入表+评论 一次提交（`withReply:true`），回应展示在「Agent 的回应」区块；点拒绝直接提交。历史回看回显「我的留言」与持久化的 Agent 回应；已反馈仍可补「加入计划表」；右上角删除走手绘确认弹窗
 - `Dashboard.vue`：计划表勾选/删除/清除已完成（`X PENDING · Y DONE`）+ 历史卡片；管理模式批量删除走手绘确认弹窗（文案带选中条数）
@@ -193,7 +220,7 @@
   - 意愿×执行：散点气泡已改为**手绘不规则墨圈**（9 锚点半径 ±10% 确定性抖动 + 闭合 Catmull-Rom，比正圆生动、比涂鸦圆整）；实心=已执行/空心=未执行；y 轴各层严格等距（修复 0/1/2 刻度疏密不一）；全部抖动用确定性 hash，刷新一致；含 `prefers-reduced-motion` 降级
 - `Login.vue` / `Register.vue` / `ForgotPassword.vue`（新增）：注册与找回密码均需邮箱验证码，复用 `EmailCodeInput.vue`（60s 倒计时）
 - `Profile.vue`：资料展示/编辑（**仅本地生效，后端无更新接口**）、统计概览、邮箱验证码注销账户
-- 手绘组件库：SketchBorder / LinearButton / SketchCheckbox / SketchClock / DecorDotCluster / DualTextBlock / PageWrapper；**SketchConfirmDialog（2026-09-24 新增）**：Teleport 到 body 的手绘确认弹窗（奶米底+缠绕边框+Esc/点遮罩取消+loading 锁定+缩放入场动画），全站删除类二次确认统一用它，**不要再用 window.confirm/alert**（alert 仅保留接口失败兜底提示）
+- 手绘组件库：SketchBorder / LinearButton / SketchCheckbox / SketchClock / DecorDotCluster / DualTextBlock / PageWrapper / **SketchSelect（2026-09-30 新增，手绘下拉，替换原生 select）** / **SketchDatePicker（2026-09-30 新增，手绘日历，替换原生 datetime-local）** / **SketchConfirmDialog（2026-09-24 新增）**：Teleport 到 body 的手绘确认弹窗（奶米底+缠绕边框+Esc/点遮罩取消+loading 锁定+缩放入场动画），全站删除类二次确认统一用它，**不要再用 window.confirm/alert**（alert 仅保留接口失败兜底提示）
 
 ### 已验证
 
@@ -217,6 +244,10 @@
   - 勾选答案之书+塔罗的建会话链路：字段贯通（DTO→prompt extras→主回答 JSON→落库→toSessionRes 回显）已逐段确认，前后端类型检查通过；解读与结论同向/圆场的实际文案效果待建会话抽检
   - `/memory/summary` 对 e2e_m35 产出跨类别整体画像（学习类高接受执行 + 高强度健康任务拒绝），非单条记忆原文；统计页 top1 兜底→LLM 画像替换正常
   - 前后端 tsc/vue-tsc 通过；synchronize 自动加列 task.weather_city/weather_text/weather_score、task_session.tarot_reading/answer_book_reading、user_memory.keyword
+- **天气定位/全国城市/手绘控件/重试（2026-09-30 实测）**：
+  - `GET /agent/cities` 返回 31 省 341 地级市；省下拉选中后城市联动；直辖市（北京）城市只有一项且能正常出天气卡；📍自动定位链路实测通过（WGS84 → 百度 regeo → 城市名 → whyta）
+  - SketchSelect 弹层奶米底/薄荷高亮/点外部收起正常；SketchDatePicker 月导航/选日/时分/清除/确定全部正常；控制台零报错
+  - 首页/关键词页在断网/后端挂起时自动重试两次，最终失败显示「重新加载」按钮而非空状态；恢复网络后点重试即恢复数据
 
 ---
 
@@ -224,9 +255,11 @@
 
 | 问题 | 状态 | 说明 |
 |---|---|---|
-| 个人资料修改不同步 | 已知限制 | 后端无 update 接口，用户名/邮箱/bio 编辑只写 localStorage |
-| 统计无后端接口 | 可接受 | 前端基于 `GET /sessions` 全量列表聚合，数据量大后需后端聚合 |
+| ~~个人资料修改不同步~~ | **已解决** | 2026-10-01 补 `PATCH /user/profile` 接口，前端真实调用 |
+| ~~统计无后端接口~~ | **已解决** | 2026-10-01 补 `GET /agent/stats` SQL 聚合，前端不再拉全量 |
+| ~~`GET /sessions` 内存过滤~~ | **已解决** | 2026-10-01 改 SQL 层 `where: { task: { userId } }` 过滤 |
 | 验证码内存存储 | 已知限制 | 服务重启即失效，多实例部署不共享；上线前需换 Redis/DB |
+| ts-jest 单测全挂 | 已知限制 | 项目级 rootDir 配置问题，与业务代码无关 |
 
 ---
 
@@ -234,15 +267,33 @@
 
 **第一步（规则 → DeepSeek）已完成 ✅**（commit `6900a5d`）。
 **第二步（当前任务 + 历史行为 → DeepSeek）已完成 ✅**（commit `91caa89`），含方案 B 跨维度规律。
-**第三步（Memory 用户长期记忆）已完成 ✅**（3.1-3.3 commit `9f50839`；3.4+3.5、登录滑动过期及 2026-09-24 二次对话/补充条件/关键词卡均已完成、本地待提交）。接下来：
+**第三步（Memory 用户长期记忆）已完成 ✅**（3.1-3.3 commit `9f50839`；3.4+3.5、登录滑动过期及 2026-09-24 二次对话/补充条件/关键词卡均已完成、本地待提交）。
+**2026-09-29 天气/统一解读/综合论述已提交推送**（commit `75280d8`）。**2026-09-30 天气定位/全国城市/手绘控件/加载重试已完成、本地待提交**。**2026-10-01 用户资料更新/统计聚合/关键词汇总页/分类抽屉/计划表重构/钱包评估/LLM 回答质量优化已完成、本地待提交**。
 
-1. **提交当前本地改动**（3.4/3.5 + 滑动过期 + 二次对话 + 补充条件 + 手绘确认弹窗 + 关键词卡/墨圈 + keyword 短标签 + 记忆综合论述 `/memory/summary` + 今日天气加成 + 塔罗/答案之书统一解读）
-2. 后端补用户资料更新接口（username/email/bio），前端 `updateProfile` 改为真实调用
-3. （可选）统计聚合接口，避免前端拉全量会话
-4. 塔罗结果页展示关键词/牌面图（牌名+正逆位+LLM 解读已展示；keywords/description/imageUrl 后端已返回但前端未用）
-5. 验证码存储替换为 Redis/DB（部署前必做）
-6. Memory 完整管理页（统计页关键词卡已是只读入口；可再做增删改）
-7. 更后阶段才考虑：RAG / 向量数据库 / Embedding / MCP / 多 Agent / 多轮对话（第三步已用规则引擎+轻量 LLM 提炼覆盖，暂不需要）
+### P0（部署前必做）
+
+1. **提交全部本地改动**（2026-09-23 ~ 2026-10-01 共 6 批功能，数据丢失风险高）
+2. **验证码存储换 Redis/DB**（当前内存 Map，重启失效、多实例不共享）
+
+### P1（体验/性能，已完成）
+
+- ~~用户资料更新接口~~ ✅
+- ~~统计聚合接口~~ ✅
+- ~~`GET /sessions` SQL 过滤~~ ✅
+- ~~关键词汇总页（记忆 CRUD）~~ ✅
+- ~~历史会话分类折叠~~ ✅
+- ~~计划表已完成分类折叠 + 归档~~ ✅
+- ~~消费购物钱包评估~~ ✅
+- ~~LLM 回答质量优化（数据先行/直接回答/钱包约束/结论一致性）~~ ✅
+
+### P2（增强功能，可选）
+
+- 塔罗牌牌面图展示（用户反馈难看，已回退；如需再议）
+- 单测 ts-jest rootDir 配置修复
+
+### P3（远期）
+
+- RAG / 向量库 / Embedding / MCP / 多 Agent / 多轮对话（第三步已用规则引擎+轻量 LLM 提炼覆盖，暂不需要）
 
 ---
 
@@ -276,6 +327,10 @@
 26. **随机神谕与 LLM 结论会打架**：塔罗解读/答案之书最初各自独立调一次 LLM（或纯随机 API），看不到主结论，实测出现"建议去做、答案之书说再等等"。最终方案（2026-09-29）：随机结果（牌面/答案之书原文）保留随机感，在主 LLM 调用**之前**抽好并注入 prompt，由同一次主回答输出解读，与结论同向（塔罗）或转换视角圆场（答案之书）。切忌为了一致性让 LLM 自己编"随机"答案——那就失去翻书的意义
 27. **whyta 天气接口返回结构与文档示例有出入**：真实响应外层包 `{status,message,data}`，`weatherDesc` 是 `[{value:"晴"}]` 数组而非字符串；key 无效时 HTTP 200 但 `message:"Error:invalid appKey!"`。解析必须同时兼容顶层/`data`/`result` 包裹 + 字符串/数组两种 weatherDesc，并以"取不到描述即返回 null"兜底
 28. **3.5 记忆去重豁免同 key**：Dice 相似度去重必须只对**新 key** 生效；同 key 是 upsert 改写，新 value 天然与旧 content 相似，参与去重会导致老记忆永远无法被 LLM 改写（见 Memory 模块 3.5）
+29. **前端加载失败误显示空状态**：原逻辑把「网络失败/后端重启」与「账号为空」一视同仁——直接清空数据并显示「还没有记录」。解法：`isNetworkError` 识别可重试故障，自动 0.7s/1.5s 重试两次；最终失败置 `loadError` 并给「重新加载」按钮，不再清空缓存、不再误判为空账号
+30. **原生表单控件与手绘风割裂**：原生 select 白底蓝高亮、datetime-local 系统弹层，与手绘风严重不搭。解法：自绘 SketchSelect（手绘下划线触发 + 方形奶米弹层 + 薄荷高亮）和 SketchDatePicker（手绘日历：月导航/选日/时分/清除+确定），全站统一替换
+31. **SketchBorder 四角装饰压线**：`preserveAspectRatio="none"` 非等比拉伸时，viewBox 里距边 6~12 单位的描边在宽卡片上被拉到约 40px，padding ≤2rem 时文字压线。解法：窄卡片（记忆列表项）水平 padding 加大到 2.75rem；根治需改 SVG 用 vector-effect 或百分比路径（暂不做）
+32. **LLM 同类问题结论摇摆**：连续问"404.46 存款，生活费只剩 8.85，要抽多少出来"，4 次结论方向不一致（78→32→68→72），且出现幻觉编造细节（"20分钟短任务"、"缺口远大于余额"）、不回答核心问题（抽多少）。解法（2026-10-01）：system prompt 加【数据先行】（严禁编造数字、估算展示计算过程）+【直接回答】（问数量必须给数字）+【钱包约束】（低宽裕度限制建议金额）+【结论一致性】（同类问题方向与上次一致），并把最近一次会话结论注入 prompt
 
 ---
 
@@ -303,6 +358,7 @@ npm test
 irm "http://localhost:3000/api/agent/answer-book?question=test"
 irm "http://localhost:3000/api/agent/tarot" -Method Post -ContentType "application/json" -Body '{}'
 curl.exe -s "http://localhost:3000/api/agent/weather?city=武汉"   # PowerShell 里 curl 是别名，须用 curl.exe
+curl.exe -s "http://localhost:3000/api/agent/cities"             # 全国省/市联动数据
 
 # 测试受保护接口（先登录拿 token）
 $h = @{ Authorization = "Bearer <token>" }
@@ -311,6 +367,12 @@ irm "http://localhost:3000/api/memory" -Headers $h          # 用户长期记忆
 
 # E2E 测试账号（保留在库中，密码均为 Test123456）：e2e_m35 / e2e_m35b / e2e_m35c
 # 3.5 提炼有 10 分钟内存节流，连续测试需重启后端重置节流 Map
+# Birch 密码为 birch1（2026-10-01 用户要求固定，不要重置）
+
+# 新增公开接口（2026-10-01）
+irm "http://localhost:3000/api/agent/stats" -Headers $h          # 统计聚合
+irm "http://localhost:3000/api/todos/archived" -Headers $h       # 归档待办列表
+irm "http://localhost:3000/api/todos/1/archive" -Method Patch -Headers $h   # 归档单条
 
 # Git（前后端同一个仓库，在根目录操作）
 git status

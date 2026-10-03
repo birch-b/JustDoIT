@@ -19,6 +19,7 @@ const agentStore = useAgentStore();
 
 const editing = ref(false);
 const msg = ref("");
+const saving = ref(false);
 const form = reactive({
   username: "",
   email: "",
@@ -32,8 +33,8 @@ onMounted(() => {
     router.push("/login");
     return;
   }
-  // 拉取当前用户会话用于统计，后端连不通时 store 内部 mock 兜底
-  agentStore.loadSessions();
+  // 拉取后端聚合的统计数据（个人中心概览用）
+  agentStore.loadStats();
   syncForm();
 });
 
@@ -55,7 +56,7 @@ function cancelEdit() {
   msg.value = "";
 }
 
-function save() {
+async function save() {
   msg.value = "";
   if (!form.username.trim()) {
     msg.value = "用户名不能为空";
@@ -65,11 +66,13 @@ function save() {
     msg.value = "邮箱格式不正确";
     return;
   }
-  const res = userStore.updateProfile({
+  saving.value = true;
+  const res = await userStore.updateProfile({
     username: form.username.trim(),
     email: form.email.trim(),
     bio: form.bio.trim(),
   });
+  saving.value = false;
   if (!res.ok) {
     msg.value = res.msg;
     return;
@@ -203,7 +206,7 @@ function formatDate(iso: string): string {
             <div class="flex items-start gap-3">
               <SketchCheckbox :size="14" decorative />
               <span class="text-sketch-lineSub w-20 shrink-0 pt-0.5">简介</span>
-              <span class="flex-1">{{ userStore.currentUser.bio }}</span>
+              <span class="flex-1">{{ userStore.currentUser.bio || "这个人很懒，什么都没留下。" }}</span>
             </div>
           </div>
 
@@ -231,10 +234,10 @@ function formatDate(iso: string): string {
             </p>
 
             <div class="flex gap-3 pt-2">
-              <LinearButton size="md" @click="save">
-                <span>保存</span>
+              <LinearButton size="md" :disabled="saving" @click="save">
+                <span>{{ saving ? "保存中…" : "保存" }}</span>
               </LinearButton>
-              <LinearButton size="md" @click="cancelEdit">
+              <LinearButton size="md" :disabled="saving" @click="cancelEdit">
                 <span>取消</span>
               </LinearButton>
             </div>

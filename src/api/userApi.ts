@@ -8,11 +8,18 @@ export interface AuthUser {
   id: number;
   username: string;
   email: string;
+  bio?: string;        // 个人简介，空串代表未设置
+  createdAt?: string | null; // 注册时间 ISO 串
 }
 
 /** 注册/登录成功响应 */
 export interface AuthRes {
   token: string;
+  user: AuthUser;
+}
+
+/** 更新资料响应 */
+export interface UpdateProfileRes {
   user: AuthUser;
 }
 
@@ -80,6 +87,18 @@ export const userApi = {
     return authRequest<{ message: string }>(`${BASE_URL}/delete-account`, {
       method: "POST",
       body: JSON.stringify({ code }),
+    });
+  },
+
+  /** 更新个人资料：PATCH /api/user/profile（需登录；username/email/bio 均可选） */
+  updateProfile(payload: {
+    username?: string;
+    email?: string;
+    bio?: string;
+  }) {
+    return authRequest<UpdateProfileRes>(`${BASE_URL}/profile`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
     });
   },
 };

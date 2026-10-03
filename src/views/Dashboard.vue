@@ -26,9 +26,17 @@ const isLoggedIn = computed(() => userStore.isLoggedIn);
 
 // 已完成区折叠状态
 const showDone = ref(false);
-// 待办是否全部为空（未登录时也视为空，不展示本地数据）
+// 已完成按分类分组的展开状态（默认全部折叠）
+const doneOpenCats = ref<string[]>([]);
+// 归档记录区域展开状态
+const showArchived = ref(false);
+// 待移出计划表的 todo（确认弹窗）
+const todoToRemove = ref<{ id: number; taskContent: string } | null>(null);
+// 归档确认弹窗
+const showArchiveConfirm = ref(false);
+// 待办是否全部为空（未登录时也视为空，不展示本地数据；加载失败不算空）
 const todoIsEmpty = computed(
-  () => !isLoggedIn.value || todoStore.list.length === 0
+  () => !isLoggedIn.value || (!todoStore.loadError && todoStore.list.length === 0)
 );
 // 未登录时计数显示 0
 const pendingCount = computed(() =>
@@ -54,6 +62,7 @@ onMounted(() => {
   if (isLoggedIn.value) {
     store.loadSessions();
     todoStore.loadTodos();
+    todoStore.loadArchived();
   } else {
     store.resetSessions();
     todoStore.resetTodos();
@@ -61,7 +70,78 @@ onMounted(() => {
 });
 
 const cards = computed(() => store.cardList);
-const isEmpty = computed(() => cards.value.length === 0);
+
+// 历史会话按分类分组成"抽屉"：每组可折叠，像文件夹收纳文件
+// 固定分类顺序，只渲染有会话的组；默认展开最新会话所在的组
+const CATEGORY_ORDER = ["work", "study", "life", "shopping", "health", "social", "other"];
+const openCats = ref<string[]>([]);
+const groupedCards = computed(() => {
+  const map = new Map<string, typeof cards.value>();
+  for (const c of cards.value) {
+    const arr = map.get(c.category) ?? [];
+    arr.push(c);
+    map.set(c.category, arr);
+  }
+  return CATEGORY_ORDER.filter((k) => map.has(k)).map((k) => ({
+    key: k,
+    label: categoryLabel[k],
+    list: map.get(k)!,
+  }));
+});
+function toggleCat(key: string) {
+  openCats.value = openCats.value.includes(key)
+    ? openCats.value.filter((k) => k !== key)
+    : [...openCats.value, key];
+}
+// 刷新/进入页面时所有抽屉默认折叠（openCats 初始为空），用户点击组头才展开
+
+// 已完成待办按分类分组
+const groupedDoneList = computed(() => {
+  const map = new Map<string, typeof todoStore.doneList>();
+  for (const t of todoStore.doneList) {
+    const arr = map.get(t.category) ?? [];
+    arr.push(t);
+    map.set(t.category, arr);
+  }
+  return CATEGORY_ORDER.filter((k) => map.has(k)).map((k) => ({
+    key: k,
+    label: categoryLabel[k],
+    list: map.get(k)!,
+  }));
+});
+function toggleDoneCat(key: string) {
+  doneOpenCats.value = doneOpenCats.value.includes(key)
+    ? doneOpenCats.value.filter((k) => k !== key)
+    : [...doneOpenCats.value, key];
+}
+
+// 归档记录
+const archivedCount = computed(() => todoStore.archivedList.length);
+
+function askRemoveTodo(todo: { id: number; taskContent: string }) {
+  todoToRemove.value = todo;
+}
+function confirmRemoveTodo() {
+  if (!todoToRemove.value) return;
+  todoStore.removeTodo(todoToRemove.value.id);
+  todoToRemove.value = null;
+}
+function askArchiveDone() {
+  showArchiveConfirm.value = true;
+}
+function confirmArchiveDone() {
+  todoStore.clearDone();
+  showArchiveConfirm.value = false;
+}
+// 会话加载失败（已登录但网络/后端故障），用于显示「重试」而非空状态
+const sessionLoadFailed = computed(() => isLoggedIn.value && store.loadError && cards.value.length === 0);
+const isEmpty = computed(
+  () => !sessionLoadFailed.value && !store.loading && cards.value.length === 0
+);
+function retryLoad() {
+  store.loadSessions();
+  todoStore.loadTodos();
+}
 
 // 批量管理模式
 const selectMode = ref(false);
@@ -162,7 +242,7 @@ function goLogin() {
     <!-- 顶部：装饰时钟 + 主行动按钮 -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12 md:mb-16">
       <div class="flex justify-center md:justify-start order-2 md:order-1">
-        <SketchClock :score="isEmpty ? 0 : cards[0].agentSuggestIndex" :size="250" />
+        <SketchClock :score="cards[0]?.agentSuggestIndex ?? 0" :size="250" />
       </div>
       <div class="md:col-span-2 flex flex-col justify-center order-1 md:order-2">
         <DualTextBlock
@@ -199,6 +279,12 @@ function goLogin() {
         </LinearButton>
       </div>
 
+      <!-- 加载失败：给重试入口，不误显示成「没有待办」 -->
+      <div v-else-if="isLoggedIn && todoStore.loadError" class="py-6 text-center">
+        <p class="text-sm font-light text-sketch-lineSub">计划拉取失败，可能是网络抖动。</p>
+        <LinearButton size="sm" class="mt-3" @click="todoStore.loadTodos()">重新加载</LinearButton>
+      </div>
+
       <template v-else>
         <!-- 未完成（优先展示） -->
         <div v-if="todoStore.pendingList.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -230,11 +316,11 @@ function goLogin() {
                   </span>
                 </div>
               </div>
-              <!-- 删除 -->
+              <!-- 移出计划表 -->
               <button
                 class="text-sketch-lineSub hover:text-sketch-line text-sm shrink-0"
-                @click="todoStore.removeTodo(todo.id)"
-                aria-label="删除"
+                @click="askRemoveTodo(todo)"
+                aria-label="移出计划表"
               >
                 ✕
               </button>
@@ -242,7 +328,7 @@ function goLogin() {
           </SketchBorder>
         </div>
 
-        <!-- 已完成折叠区 -->
+        <!-- 已完成折叠区（按分类分组成抽屉） -->
         <div v-if="todoStore.doneList.length" class="mt-6">
           <div class="flex items-center justify-between">
             <button
@@ -254,38 +340,85 @@ function goLogin() {
             </button>
             <button
               class="text-[11px] text-sketch-lineSub hover:text-sketch-line"
-              @click="todoStore.clearDone()"
+              @click="askArchiveDone"
             >
-              一键清除
+              归档已完成
             </button>
           </div>
 
-          <div v-show="showDone" class="mt-3 space-y-2">
+          <div v-show="showDone" class="mt-4 space-y-4">
+            <div v-for="g in groupedDoneList" :key="g.key">
+              <!-- 分类抽屉头 -->
+              <button
+                type="button"
+                class="flex w-full items-center justify-between pb-1 text-left"
+                :aria-expanded="doneOpenCats.includes(g.key)"
+                @click="toggleDoneCat(g.key)"
+              >
+                <span class="flex items-center gap-2">
+                  <span
+                    class="inline-block transition-transform duration-300 text-sketch-lineSub text-xs"
+                    :style="{ transform: doneOpenCats.includes(g.key) ? 'rotate(90deg)' : 'rotate(0deg)' }"
+                  >▶</span>
+                  <span class="text-xs font-light text-sketch-lineSub">{{ g.label }}</span>
+                </span>
+                <span class="text-[10px] text-sketch-lineSub font-en tracking-widest">{{ g.list.length }}</span>
+              </button>
+
+              <!-- 该分类下的已完成待办 -->
+              <div v-show="doneOpenCats.includes(g.key)" class="mt-2 space-y-2">
+                <div
+                  v-for="todo in g.list"
+                  :key="todo.id"
+                  class="flex items-center gap-3 px-3 py-2 opacity-60"
+                >
+                  <SketchCheckbox
+                    :size="18"
+                    :model-value="true"
+                    class="shrink-0"
+                    @update:model-value="todoStore.toggleDone(todo.id)"
+                  />
+                  <p class="flex-1 min-w-0 text-sm font-light line-through truncate">
+                    {{ todo.taskContent }}
+                  </p>
+                  <SketchChip tag>
+                    {{ categoryLabel[todo.category] || todo.category }}
+                  </SketchChip>
+                  <button
+                    class="text-sketch-lineSub hover:text-sketch-line text-xs shrink-0"
+                    @click="askRemoveTodo(todo)"
+                    aria-label="移出计划表"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 归档记录入口 -->
+        <div v-if="archivedCount" class="mt-4">
+          <button
+            class="flex items-center gap-2 text-xs text-sketch-lineSub hover:text-sketch-line"
+            @click="showArchived = !showArchived"
+          >
+            <span class="inline-block transition-transform duration-300" :style="{ transform: showArchived ? 'rotate(90deg)' : 'rotate(0deg)' }">▶</span>
+            <span>归档记录 {{ archivedCount }} 项</span>
+          </button>
+
+          <div v-show="showArchived" class="mt-3 space-y-2 opacity-50">
             <div
-              v-for="todo in todoStore.doneList"
+              v-for="todo in todoStore.archivedList"
               :key="todo.id"
-              class="flex items-center gap-3 px-3 py-2 opacity-60"
+              class="flex items-center gap-3 px-3 py-2"
             >
-              <!-- 勾选框：显示对勾，点击取消完成 -->
-              <SketchCheckbox
-                :size="18"
-                :model-value="true"
-                class="shrink-0"
-                @update:model-value="todoStore.toggleDone(todo.id)"
-              />
               <p class="flex-1 min-w-0 text-sm font-light line-through truncate">
                 {{ todo.taskContent }}
               </p>
               <SketchChip tag>
                 {{ categoryLabel[todo.category] || todo.category }}
               </SketchChip>
-              <button
-                class="text-sketch-lineSub hover:text-sketch-line text-xs shrink-0"
-                @click="todoStore.removeTodo(todo.id)"
-                aria-label="删除"
-              >
-                ✕
-              </button>
             </div>
           </div>
         </div>
@@ -302,7 +435,7 @@ function goLogin() {
             {{ cards.length }} ITEMS
           </span>
           <button
-            v-if="isLoggedIn && !isEmpty"
+            v-if="isLoggedIn && !isEmpty && !sessionLoadFailed"
             class="text-xs text-sketch-lineSub hover:text-sketch-line whitespace-nowrap opacity-70 hover:opacity-100 transition-opacity"
             @click="enterSelect"
           >
@@ -334,8 +467,22 @@ function goLogin() {
         </div>
       </div>
 
-      <!-- 空状态 -->
-      <div v-if="isEmpty" class="flex flex-col items-center justify-center py-20 text-center">
+      <!-- 加载失败：网络/后端暂时不可用，给重试入口 -->
+      <div v-if="sessionLoadFailed" class="flex flex-col items-center justify-center py-20 text-center">
+        <SketchBorder padding="2.5rem 3rem" class="max-w-sm">
+          <DualTextBlock
+            cn="网络开小差了，记录暂时没拉下来"
+            en="FAILED TO LOAD. GIVE IT ANOTHER TRY."
+            size="md"
+          />
+          <div class="mt-6">
+            <LinearButton size="md" @click="retryLoad">重新加载</LinearButton>
+          </div>
+        </SketchBorder>
+      </div>
+
+      <!-- 真空状态 -->
+      <div v-else-if="isEmpty" class="flex flex-col items-center justify-center py-20 text-center">
         <SketchBorder padding="2.5rem 3rem" class="max-w-sm">
           <SketchClock :score="0" :size="150" :animated="false" />
           <DualTextBlock
@@ -350,17 +497,42 @@ function goLogin() {
         </SketchBorder>
       </div>
 
-      <!-- 卡片网格 -->
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        <component
-          :is="selectMode ? 'div' : 'button'"
-          v-for="card in cards"
-          :key="card.sessionId"
-          class="group relative min-h-[210px] block w-full text-left cursor-pointer transition-colors duration-200 hover:bg-sketch-hover"
-          :class="{ 'bg-sketch-hover': selectMode && isSelected(card.sessionId) }"
-          :aria-pressed="selectMode ? isSelected(card.sessionId) : undefined"
-          @click="onCardClick(card.sessionId)"
-        >
+      <!-- 分类抽屉：每组可折叠，默认展开最新会话所在分类 -->
+      <div v-else class="space-y-6">
+        <div v-for="g in groupedCards" :key="g.key">
+          <!-- 抽屉头：分类名 + 数量 + 折叠箭头 -->
+          <button
+            type="button"
+            class="flex w-full items-center justify-between pb-2 sketch-border-b text-left"
+            :aria-expanded="openCats.includes(g.key)"
+            @click="toggleCat(g.key)"
+          >
+            <span class="flex items-center gap-2">
+              <span
+                class="inline-block transition-transform duration-300 text-sketch-lineSub"
+                :style="{ transform: openCats.includes(g.key) ? 'rotate(90deg)' : 'rotate(0deg)' }"
+              >▶</span>
+              <span class="text-sm font-light">{{ g.label }}</span>
+            </span>
+            <span class="text-xs text-sketch-lineSub font-en tracking-widest">
+              {{ g.list.length }} ITEMS
+            </span>
+          </button>
+
+          <!-- 抽屉内容：该分类下的卡片网格 -->
+          <div
+            v-show="openCats.includes(g.key)"
+            class="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
+          >
+            <component
+              :is="selectMode ? 'div' : 'button'"
+              v-for="card in g.list"
+              :key="card.sessionId"
+              class="group relative min-h-[210px] block w-full text-left cursor-pointer transition-colors duration-200 hover:bg-sketch-hover"
+              :class="{ 'bg-sketch-hover': selectMode && isSelected(card.sessionId) }"
+              :aria-pressed="selectMode ? isSelected(card.sessionId) : undefined"
+              @click="onCardClick(card.sessionId)"
+            >
           <SketchBorder padding="1.75rem" class="h-full">
             <div class="flex items-start justify-between gap-3">
               <!-- 管理模式勾选框（不单独绑事件，点击冒泡给整卡统一处理，避免双重切换） -->
@@ -405,7 +577,9 @@ function goLogin() {
   </div>
 </div>
           </SketchBorder>
-        </component>
+            </component>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -419,6 +593,28 @@ function goLogin() {
       :loading="deleting"
       @confirm="doBatchDelete"
       @cancel="confirmOpen = false"
+    />
+
+    <!-- 移出计划表确认 -->
+    <SketchConfirmDialog
+      :open="!!todoToRemove"
+      title="移出计划表"
+      en-title="REMOVE FROM PLAN"
+      :message="`确定将「${todoToRemove?.taskContent}」移出计划表吗？该待办将被删除，但关联的历史会话不受影响。如需重新加入，可在历史会话中找到对应会话，进入详情页重新加入计划表。`"
+      confirm-text="移出计划表"
+      @confirm="confirmRemoveTodo"
+      @cancel="todoToRemove = null"
+    />
+
+    <!-- 归档已完成确认 -->
+    <SketchConfirmDialog
+      :open="showArchiveConfirm"
+      title="归档已完成"
+      en-title="ARCHIVE DONE"
+      :message="`确定归档全部 ${todoStore.doneList.length} 条已完成待办吗？归档后它们将从计划表隐藏，但数据保留在「归档记录」中，随时可查看。`"
+      confirm-text="归档"
+      @confirm="confirmArchiveDone"
+      @cancel="showArchiveConfirm = false"
     />
   </PageWrapper>
 </template>

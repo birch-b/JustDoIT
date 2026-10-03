@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query, UseGua
 import { AnswerBookService } from './answerbook.service';
 import { TarotService, TarotResult } from './tarot.service';
 import { WeatherService, WeatherInfo } from './weather.service';
+import { CityService, CityGroup } from './city.service';
 import { AgentService } from './agent.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { ActionRecordDto } from './dto/action-record.dto';
@@ -15,6 +16,7 @@ export class AgentController {
     private readonly answerBookService: AnswerBookService,
     private readonly tarotService: TarotService,
     private readonly weatherService: WeatherService,
+    private readonly cityService: CityService,
     private readonly agentService: AgentService,
   ) {}
 
@@ -39,12 +41,32 @@ export class AgentController {
   }
 
   /**
-   * 今日天气：GET /api/agent/weather?city=武汉
-   * 公开接口；未配置 key/查询失败时 data 为 null，由前端提示且不阻塞提交
+   * 今日天气：
+   *   GET /api/agent/weather?city=武汉          按城市查
+   *   GET /api/agent/weather?lat=23.13&lng=113.26 先百度逆地理(WGS84)转城市再查
+   * 公开接口；未配置 key/定位或查询失败时 data 为 null，由前端提示且不阻塞提交
    */
   @Get('weather')
-  async weather(@Query('city') city: string): Promise<{ code: number; data: WeatherInfo | null }> {
-    const data = await this.weatherService.getWeather(city ?? '');
+  async weather(
+    @Query('city') city?: string,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+  ): Promise<{ code: number; data: WeatherInfo | null }> {
+    let targetCity = (city ?? '').trim();
+    if (!targetCity && lat !== undefined && lng !== undefined) {
+      targetCity = (await this.weatherService.reverseGeocode(Number(lat), Number(lng))) ?? '';
+    }
+    const data = await this.weatherService.getWeather(targetCity);
+    return { code: 0, data };
+  }
+
+  /**
+   * 全国城市列表（省→市两级）：GET /api/agent/cities
+   * 公开接口；未配置 mxnzp 凭证或第三方失败时 data 为 null，前端回退内置城市
+   */
+  @Get('cities')
+  async cities(): Promise<{ code: number; data: CityGroup[] | null }> {
+    const data = await this.cityService.getCityGroups();
     return { code: 0, data };
   }
 
@@ -60,6 +82,13 @@ export class AgentController {
   @Get('sessions')
   async listSessions(@GetUser('userId') userId: number) {
     return this.agentService.listSessions(userId);
+  }
+
+  /** 统计聚合：GET /api/agent/stats（需登录，后端聚合避免前端拉全量） */
+  @UseGuards(JwtAuthGuard)
+  @Get('stats')
+  async getStats(@GetUser('userId') userId: number) {
+    return this.agentService.getStats(userId);
   }
 
   /** 会话详情：GET /api/agent/session/:id（需登录，校验归属） */

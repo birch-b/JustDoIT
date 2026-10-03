@@ -21,7 +21,11 @@ export class LlmService {
     dto: CreateSessionDto,
     historySummary?: string,
     memoryText?: string,
-    extras?: { tarotCard?: string; answerBookText?: string },
+    extras?: {
+      tarotCard?: string;
+      answerBookText?: string;
+      lastSession?: { taskContent: string; category: string; conclusion: string };
+    },
   ): Promise<LlmAdvice | null> {
     const messages = buildPrompt(dto, historySummary, memoryText, extras);
     const parsed = (await this.chatJson(messages)) as LlmAdvice | null;
