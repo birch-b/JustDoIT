@@ -35,8 +35,13 @@ const todoToRemove = ref<{ id: number; taskContent: string } | null>(null);
 // 归档确认弹窗
 const showArchiveConfirm = ref(false);
 // 待办是否全部为空（未登录时也视为空，不展示本地数据；加载失败不算空）
+// 有归档记录时不算空：否则全部归档后「归档记录」入口会随空状态一起消失
 const todoIsEmpty = computed(
-  () => !isLoggedIn.value || (!todoStore.loadError && todoStore.list.length === 0)
+  () =>
+    !isLoggedIn.value ||
+    (!todoStore.loadError &&
+      todoStore.list.length === 0 &&
+      todoStore.archivedItems.length === 0)
 );
 // 未登录时计数显示 0
 const pendingCount = computed(() =>

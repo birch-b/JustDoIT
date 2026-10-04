@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 手绘风日期时间选择器：方形奶米底弹层 + 日历网格 + 时间选择，替换原生 datetime-local
 // 用法：<SketchDatePicker v-model="form.deadline" placeholder="选个时间" />
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 const props = withDefaults(defineProps<{
   modelValue: string | null; // ISO 字符串 "YYYY-MM-DDTHH:mm"
@@ -15,6 +15,10 @@ const emit = defineEmits<{
 }>();
 
 const open = ref(false);
+/** 组件根元素，用于点外部关闭 */
+const rootEl = ref<HTMLElement | null>(null);
+/** 时间子下拉：'hour' / 'minute' / null（同一时间只展开一个） */
+const openTimeMenu = ref<"hour" | "minute" | null>(null);
 const today = new Date();
 
 // 当前浏览的月份
@@ -87,15 +91,17 @@ function emitValue() {
   emit("update:modelValue", `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(selHour.value)}:${pad(selMinute.value)}`);
 }
 
-function onHourChange(e: Event) {
-  selHour.value = Number((e.target as HTMLInputElement).value);
+function setHour(h: number) {
+  selHour.value = h;
+  openTimeMenu.value = null;
   if (selectedDate.value) {
     selectedDate.value = new Date(selectedDate.value.getFullYear(), selectedDate.value.getMonth(), selectedDate.value.getDate(), selHour.value, selMinute.value);
     emitValue();
   }
 }
-function onMinuteChange(e: Event) {
-  selMinute.value = Number((e.target as HTMLInputElement).value);
+function setMinute(m: number) {
+  selMinute.value = m;
+  openTimeMenu.value = null;
   if (selectedDate.value) {
     selectedDate.value = new Date(selectedDate.value.getFullYear(), selectedDate.value.getMonth(), selectedDate.value.getDate(), selHour.value, selMinute.value);
     emitValue();
@@ -117,6 +123,21 @@ function confirmDate() {
   open.value = false;
 }
 
+function onDocMouseDown(e: MouseEvent) {
+  if (!open.value) return;
+  if (rootEl.value && !rootEl.value.contains(e.target as Node)) {
+    open.value = false;
+    openTimeMenu.value = null;
+  }
+}
+function toggleOpen() {
+  open.value = !open.value;
+  if (!open.value) openTimeMenu.value = null;
+}
+
+onMounted(() => document.addEventListener("mousedown", onDocMouseDown));
+onBeforeUnmount(() => document.removeEventListener("mousedown", onDocMouseDown));
+
 const displayText = computed(() => {
   if (!selectedDate.value) return props.placeholder;
   const d = selectedDate.value;
@@ -124,22 +145,20 @@ const displayText = computed(() => {
   return `${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 });
 
-function onBlur() { open.value = false; }
-
 // 小时/分钟选项
 const hours = Array.from({ length: 24 }, (_, i) => i);
 const minutes = [0, 15, 30, 45];
+const pad2 = (n: number) => String(n).padStart(2, "0");
 </script>
 
 <template>
-  <div class="relative select-none">
+  <div ref="rootEl" class="relative select-none">
     <!-- 触发区 -->
     <button
       type="button"
       class="sketch-input w-full flex items-center justify-between gap-1 text-left"
       :aria-expanded="open"
-      @click="open = !open"
-      @blur="onBlur"
+      @click="toggleOpen"
     >
       <span :class="selectedDate ? '' : 'text-sketch-lineSub'">{{ displayText }}</span>
       <svg class="w-4 h-4 shrink-0" viewBox="0 0 16 16" fill="none" stroke="#634442" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -156,7 +175,6 @@ const minutes = [0, 15, 30, 45];
         v-if="open"
         class="absolute z-40 mt-1 left-0 w-64"
         style="background: #F7F1E5; border: 1.5px solid #634442; box-shadow: 3px 3px 0 rgba(99,68,66,0.15);"
-        @mousedown.prevent
       >
         <!-- 月份导航 -->
         <div class="flex items-center justify-between px-3 pt-2 pb-1">
@@ -191,23 +209,69 @@ const minutes = [0, 15, 30, 45];
           </template>
         </div>
 
-        <!-- 时间选择 -->
-        <div class="flex items-center justify-center gap-2 px-3 py-1.5" style="border-top: 1px dashed rgba(99,68,66,0.2)">
-          <select
-            class="bg-transparent text-sm font-light text-sketch-line outline-none cursor-pointer"
-            :value="selHour"
-            @change="onHourChange"
-          >
-            <option v-for="h in hours" :key="h" :value="h">{{ String(h).padStart(2, "0") }}</option>
-          </select>
+        <!-- 时间选择（自绘下拉，与手绘风一致；不能用原生 select + mousedown.prevent） -->
+        <div class="relative flex items-center justify-center gap-2 px-3 py-1.5" style="border-top: 1px dashed rgba(99,68,66,0.2)">
+          <!-- 小时 -->
+          <div class="relative">
+            <button
+              type="button"
+              class="flex items-center gap-1 bg-transparent text-sm font-light text-sketch-line outline-none cursor-pointer"
+              @click="openTimeMenu = openTimeMenu === 'hour' ? null : 'hour'"
+            >
+              {{ pad2(selHour) }}
+              <svg class="w-2.5 h-2.5" viewBox="0 0 12 8" fill="none">
+                <path d="M1,1.5 L6,6.5 L11,1.5" stroke="#634442" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <ul
+              v-if="openTimeMenu === 'hour'"
+              class="absolute bottom-full left-1/2 z-50 mb-1 -translate-x-1/2 py-1 overflow-y-auto"
+              style="width:4.5rem;max-height:8.4rem;background:#F7F1E5;border:1.5px solid #634442;box-shadow:2px 2px 0 rgba(99,68,66,0.15)"
+            >
+              <li
+                v-for="h in hours"
+                :key="h"
+                class="px-2 py-0.5 text-center text-sm font-light cursor-pointer"
+                :class="h === selHour ? '' : 'text-sketch-line hover:bg-sketch-line/8'"
+                :style="h === selHour ? 'color:#7FA89F;background:rgba(127,168,159,0.15)' : ''"
+                @click="setHour(h)"
+              >
+                {{ pad2(h) }}
+              </li>
+            </ul>
+          </div>
+
           <span class="text-sketch-line text-sm">:</span>
-          <select
-            class="bg-transparent text-sm font-light text-sketch-line outline-none cursor-pointer"
-            :value="selMinute"
-            @change="onMinuteChange"
-          >
-            <option v-for="m in minutes" :key="m" :value="m">{{ String(m).padStart(2, "0") }}</option>
-          </select>
+
+          <!-- 分钟 -->
+          <div class="relative">
+            <button
+              type="button"
+              class="flex items-center gap-1 bg-transparent text-sm font-light text-sketch-line outline-none cursor-pointer"
+              @click="openTimeMenu = openTimeMenu === 'minute' ? null : 'minute'"
+            >
+              {{ pad2(selMinute) }}
+              <svg class="w-2.5 h-2.5" viewBox="0 0 12 8" fill="none">
+                <path d="M1,1.5 L6,6.5 L11,1.5" stroke="#634442" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <ul
+              v-if="openTimeMenu === 'minute'"
+              class="absolute bottom-full left-1/2 z-50 mb-1 -translate-x-1/2 py-1"
+              style="width:4.5rem;background:#F7F1E5;border:1.5px solid #634442;box-shadow:2px 2px 0 rgba(99,68,66,0.15)"
+            >
+              <li
+                v-for="m in minutes"
+                :key="m"
+                class="px-2 py-0.5 text-center text-sm font-light cursor-pointer"
+                :class="m === selMinute ? '' : 'text-sketch-line hover:bg-sketch-line/8'"
+                :style="m === selMinute ? 'color:#7FA89F;background:rgba(127,168,159,0.15)' : ''"
+                @click="setMinute(m)"
+              >
+                {{ pad2(m) }}
+              </li>
+            </ul>
+          </div>
         </div>
 
         <!-- 底部按钮 -->

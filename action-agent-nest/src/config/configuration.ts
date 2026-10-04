@@ -36,5 +36,9 @@ export default () => ({
   mail: {
     user: process.env.QQ_MAIL_USER,
     authCode: process.env.QQ_MAIL_AUTH_CODE
+  },
+  // Redis：存储邮箱验证码（TTL 自动过期）；本地/服务器均需可用
+  redis: {
+    url: process.env.REDIS_URL || 'redis://localhost:6379'
   }
 })

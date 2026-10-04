@@ -182,8 +182,15 @@ onMounted(load);
 </script>
 
 <template>
-  <PageWrapper title="关键词汇总" subtitle="MY KEYWORDS">
-    <div class="max-w-5xl px-4 py-10 md:px-6">
+  <PageWrapper>
+    <!-- 标题放进内容列一起 mx-auto 居中，保证标题与正文左边缘对齐（参考首页布局） -->
+    <!-- 不加内边距：PageWrapper 已有 px-4 py-10 md:px-6，避免双重缩进 -->
+    <div class="mx-auto max-w-5xl">
+      <header class="mb-8 md:mb-12">
+        <h1 class="text-3xl md:text-4xl font-light tracking-wide">关键词汇总</h1>
+        <p class="mt-1 text-sm md:text-base font-light text-sketch-lineSub font-en tracking-widest">MY KEYWORDS</p>
+      </header>
+
       <!-- 副标题说明 -->
       <p class="mb-8 text-sm font-light leading-relaxed text-sketch-lineSub">
         这些是你在一次次纠结里留下的痕迹——你容易被什么说动、总在什么事上拖延。

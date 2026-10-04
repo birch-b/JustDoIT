@@ -51,7 +51,7 @@ export class UserService {
       throw new BadRequestException('该邮箱尚未注册');
     }
 
-    const code = this.verifyCodeService.create(dto.type, dto.email);
+    const code = await this.verifyCodeService.create(dto.type, dto.email);
     await this.mailService.sendVerifyCode(dto.email, code, dto.type);
     return { message: '验证码已发送，请查收邮件' };
   }
@@ -59,7 +59,7 @@ export class UserService {
   /** 注册：校验邮箱验证码，校验用户名/邮箱唯一，bcrypt加密密码，保存用户 */
   async register(dto: RegisterDto) {
     // 校验注册类型验证码（type=register 的码，找回密码的码不通用）
-    this.verifyCodeService.verify('register', dto.email, dto.code);
+    await this.verifyCodeService.verify('register', dto.email, dto.code);
 
     // 检查用户名是否已存在
     const existUsername = await this.userRepo.findOne({
@@ -139,7 +139,7 @@ export class UserService {
     }
 
     // 校验找回密码类型验证码（type=reset 的码，注册的码不通用）
-    this.verifyCodeService.verify('reset', dto.email, dto.code);
+    await this.verifyCodeService.verify('reset', dto.email, dto.code);
 
     user.password = await bcrypt.hash(dto.newPassword, 10);
     await this.userRepo.save(user);
@@ -152,7 +152,7 @@ export class UserService {
     if (!user) {
       throw new UnauthorizedException('用户不存在');
     }
-    const code = this.verifyCodeService.create('delete', user.email);
+    const code = await this.verifyCodeService.create('delete', user.email);
     await this.mailService.sendVerifyCode(user.email, code, 'delete');
     return { message: '注销验证码已发送至账号绑定邮箱' };
   }
@@ -164,7 +164,7 @@ export class UserService {
       throw new UnauthorizedException('用户不存在');
     }
     // 校验注销类型验证码（注册/找回密码的码不通用，校验通过即一次性失效）
-    this.verifyCodeService.verify('delete', user.email, code);
+    await this.verifyCodeService.verify('delete', user.email, code);
 
     await this.userRepo.delete(userId);
     return { message: '账户已注销' };
