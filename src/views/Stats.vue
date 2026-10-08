@@ -2,15 +2,20 @@
 // 个人统计页 /stats
 // 图表沿用 lieflat-charts 视觉语法（tick rows / tick gauge / 单位点阵），
 // 手绘 SVG + 品牌 custom 色板：奶米底、深棕墨线、薄荷灰绿为唯一 HERO 色
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAgentStore } from "@/store/agentStore";
-import type { PersuadeMode } from "@/types";
+import { useTodoStore } from "@/store/todoStore";
+import { useUserStore } from "@/store/userStore";
+import type { PersuadeMode, TodoItem } from "@/types";
 import PageWrapper from "@/components/layout/PageWrapper.vue";
 import LinearButton from "@/components/sketch/LinearButton.vue";
 import SketchBorder from "@/components/sketch/SketchBorder.vue";
 import DualTextBlock from "@/components/sketch/DualTextBlock.vue";
 import SketchCheckbox from "@/components/sketch/SketchCheckbox.vue";
+import SketchCaret from "@/components/sketch/SketchCaret.vue";
+import SketchChip from "@/components/sketch/SketchChip.vue";
+import SketchConfirmDialog from "@/components/sketch/SketchConfirmDialog.vue";
 import DecorDotCluster from "@/components/sketch/DecorDotCluster.vue";
 
 // ── custom 色板角色 ──────────────────────────────────────────────
@@ -51,12 +56,58 @@ function sketchCirclePath(cx: number, cy: number, r: number, seed: number): stri
 
 const router = useRouter();
 const store = useAgentStore();
+const todoStore = useTodoStore();
+const userStore = useUserStore();
 
 onMounted(() => {
   store.loadStats();
+  // 归档记录条数要显示在抽屉头上，挂载时即拉取
+  if (userStore.isLoggedIn) todoStore.loadArchived();
 });
 
 const stats = computed(() => store.stats);
+
+// ── 归档记录抽屉：首页「归档已完成」清掉的待办在这里查看 ──────────
+const showArchived = ref(false);
+const isLoggedIn = computed(() => userStore.isLoggedIn);
+
+// 删除归档记录（确认弹窗）
+const archivedToRemove = ref<TodoItem | null>(null);
+async function confirmRemoveArchived() {
+  if (!archivedToRemove.value) return;
+  await todoStore.removeArchived(archivedToRemove.value.id);
+  archivedToRemove.value = null;
+}
+
+const categoryLabel: Record<string, string> = {
+  work: "工作",
+  study: "学习",
+  life: "生活",
+  shopping: "购物",
+  health: "健康",
+  social: "社交",
+  other: "其他",
+};
+
+// 归档记录按分类分组，默认全部折叠
+const archivedGroups = computed(() => {
+  const groups: Record<string, TodoItem[]> = {};
+  for (const todo of todoStore.archivedList) {
+    const key = todo.category || "other";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(todo);
+  }
+  // 按分类固定顺序排列
+  return Object.keys(categoryLabel)
+    .filter((k) => groups[k]?.length)
+    .map((k) => ({ category: k, items: groups[k] }));
+});
+
+// 每个分类抽屉独立折叠状态
+const archivedFoldMap = ref<Record<string, boolean>>({});
+function toggleArchivedFold(cat: string) {
+  archivedFoldMap.value[cat] = !archivedFoldMap.value[cat];
+}
 
 // ── 图 1：接受率 tick gauge（1 tick = 5%，共 20 tick）────────────
 const gaugeTicks = computed(() =>
@@ -174,7 +225,7 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
 <template>
   <PageWrapper full title="个人统计" subtitle="PERSONAL STATS">
     <!-- 散落装饰：波点簇 + 手绘方框 -->
-    <DecorDotCluster :count="26" :spread="110" :safe-inset="50" :hollow-ratio="0.3" />
+    <DecorDotCluster :count="40" :spread="110" :safe-inset="50" :hollow-ratio="0.3" />
     <div
       v-for="(b, i) in decos"
       :key="i"
@@ -374,11 +425,94 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
       </SketchBorder>
     </div>
 
+    <!-- 归档记录抽屉：首页归档清掉的待办在这里查看 -->
+    <div v-if="isLoggedIn" class="mt-10">
+      <button
+        type="button"
+        class="flex w-full items-center justify-between pb-3 sketch-border-b transition-opacity hover:opacity-70"
+        :aria-expanded="showArchived"
+        @click="showArchived = !showArchived"
+      >
+        <span class="flex items-center gap-2">
+          <span
+            class="inline-flex items-center text-sketch-lineSub transition-transform duration-300"
+            :style="{ transform: showArchived ? 'rotate(90deg)' : 'rotate(0deg)' }"
+          ><SketchCaret :size="12" /></span>
+          <DualTextBlock cn="归档记录" en="ARCHIVED" size="md" weight="normal" />
+        </span>
+        <span class="text-xs text-sketch-lineSub font-en tracking-widest">
+          {{ todoStore.archivedList.length }} ITEMS
+        </span>
+      </button>
+
+      <div v-show="showArchived" class="mt-4 space-y-2">
+        <div v-if="!todoStore.archivedList.length" class="text-sm font-light text-sketch-lineSub">
+          还没有归档记录——在首页计划表点「归档已完成」，清掉的待办会收在这里
+        </div>
+
+        <!-- 分类抽屉 -->
+        <div v-for="group in archivedGroups" :key="group.category">
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-1 py-2 text-left transition-opacity hover:opacity-70"
+            :aria-expanded="archivedFoldMap[group.category]"
+            @click="toggleArchivedFold(group.category)"
+          >
+            <span
+              class="inline-flex items-center text-sketch-lineSub transition-transform duration-300"
+              :style="{ transform: archivedFoldMap[group.category] ? 'rotate(90deg)' : 'rotate(0deg)' }"
+            ><SketchCaret :size="10" /></span>
+            <SketchChip tag>{{ categoryLabel[group.category] || group.category }}</SketchChip>
+            <span class="text-xs text-sketch-lineSub font-en tracking-widest ml-auto">
+              {{ group.items.length }}
+            </span>
+          </button>
+
+          <div v-show="archivedFoldMap[group.category]" class="mt-1 space-y-1">
+            <div
+              v-for="todo in group.items"
+              :key="todo.id"
+              class="flex items-center gap-3 px-1 py-2 opacity-60"
+            >
+              <p class="flex-1 min-w-0 truncate text-sm font-light line-through">
+                {{ todo.taskContent }}
+              </p>
+              <span
+                v-if="todo.completedAt"
+                class="shrink-0 text-[10px] text-sketch-lineSub font-en tracking-wide"
+              >
+                {{ todo.completedAt.slice(0, 10) }}
+              </span>
+              <button
+                type="button"
+                class="shrink-0 pr-2 text-xs text-sketch-lineSub transition-colors hover:text-sketch-line"
+                title="删除这条归档记录"
+                @click="archivedToRemove = todo"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 底部 -->
     <div class="mt-10 flex flex-wrap gap-3">
       <LinearButton size="lg" @click="router.push('/task-create')">新的一次纠结</LinearButton>
       <LinearButton size="lg" @click="router.push('/')">返回首页</LinearButton>
     </div>
+
+    <!-- 删除归档记录确认弹窗 -->
+    <SketchConfirmDialog
+      :open="!!archivedToRemove"
+      title="删除归档记录"
+      en-title="DELETE ARCHIVED"
+      :message="`确定删除归档记录「${archivedToRemove?.taskContent}」吗？该记录将被永久删除且不可恢复；对应历史会话的计划状态将变为「该待办已删除」，之后仍可在会话详情页重新加入计划表。`"
+      confirm-text="确认删除"
+      @confirm="confirmRemoveArchived"
+      @cancel="archivedToRemove = null"
+    />
   </PageWrapper>
 </template>
 

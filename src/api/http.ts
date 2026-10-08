@@ -9,6 +9,18 @@ export class UnauthorizedError extends Error {
   }
 }
 
+/**
+ * 5xx（后端重启/宕机，或经过 Vite/Nginx 代理时网关返回 500/502/503/504）时抛出。
+ * 注意：代理场景下 fetch 会正常 resolve 一个 5xx 响应而非 reject，
+ * 不单独归类的话会被当成业务错误，导致加载重试与网络异常页全部失效。
+ */
+export class ServerUnavailableError extends Error {
+  constructor(message = "服务器暂时不可用，请稍后重试") {
+    super(message);
+    this.name = "ServerUnavailableError";
+  }
+}
+
 function readToken(): string {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -44,6 +56,11 @@ export async function authRequest<T>(
     throw new UnauthorizedError();
   }
 
+  // 5xx 一律视为服务端临时故障（代理在后端不可用时返回 500/502），交给调用方重试
+  if (res.status >= 500) {
+    throw new ServerUnavailableError();
+  }
+
   const data = (await res.json().catch(() => null)) as
     | (T & { message?: string | string[] })
     | null;
@@ -58,14 +75,17 @@ export async function authRequest<T>(
 }
 
 /**
- * 是否为可重试的临时故障：网络断开/后端重启中（fetch 直接 reject）。
- * 401（UnauthorizedError）与业务错误不重试。
+ * 是否为可重试的临时故障：
+ * - 网络断开/代理无响应（fetch 直接 reject）
+ * - 服务端 5xx（后端重启中、网关错误）
+ * 401（UnauthorizedError）与 4xx 业务错误不重试。
  */
 export function isNetworkError(e: unknown): boolean {
   return (
-    e instanceof Error &&
-    !(e instanceof UnauthorizedError) &&
-    e.message.includes("无法连接服务器")
+    e instanceof ServerUnavailableError ||
+    (e instanceof Error &&
+      !(e instanceof UnauthorizedError) &&
+      e.message.includes("无法连接服务器"))
   );
 }
 

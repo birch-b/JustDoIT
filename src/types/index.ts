@@ -86,7 +86,6 @@ export interface AgentSessionRes {
   answerBook?: string;
   /** 答案之书一句话解读（LLM 顺着随机答案的意象圆回结论） */
   answerBookReading?: string;
-  historySummary: string;
 }
 
 // 用户提交行为反馈

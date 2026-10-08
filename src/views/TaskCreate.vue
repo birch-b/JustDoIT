@@ -13,7 +13,9 @@ import DecorDotCluster from "@/components/sketch/DecorDotCluster.vue";
 import SketchBorder from "@/components/sketch/SketchBorder.vue";
 import SketchSelect from "@/components/sketch/SketchSelect.vue";
 import SketchDatePicker from "@/components/sketch/SketchDatePicker.vue";
+import SketchPlacePicker from "@/components/sketch/SketchPlacePicker.vue";
 import DualTextBlock from "@/components/sketch/DualTextBlock.vue";
+import SketchThinkingDots from "@/components/sketch/SketchThinkingDots.vue";
 
 const router = useRouter();
 const store = useAgentStore();
@@ -41,6 +43,12 @@ const form = reactive<TaskCreateReq>({
 
 const submitting = ref(false);
 const errorMsg = ref("");
+
+// 「思考中」动画节奏：接口返回太快时至少展示 1.6s；返回慢时答案出来后再停留 0.8s，
+// 避免加载动画一闪而过、用户感知不到
+const THINKING_MIN_MS = 2000;
+const THINKING_LINGER_MS = 1000;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ── 今日天气加成：勾选 → 省份/城市选择或📍自动定位 → 展示实时天气 → 1-10 打分 ──
 const WEATHER_CITY_KEY = "jdi_weather_city";
@@ -132,12 +140,12 @@ function onProvinceChange() {
   clearWeather();
 }
 
-/** 📍 自动定位：浏览器取经纬度(WGS84) → 后端百度逆地理转城市 → 查天气 */
-async function locateWeather() {
+/** 📍 自动定位：浏览器取经纬度(WGS84) → 后端百度逆地理转城市 → 查天气；返回是否成功 */
+async function locateWeather(): Promise<boolean> {
   weatherError.value = "";
   if (!window.isSecureContext || typeof navigator === "undefined" || !navigator.geolocation) {
     weatherError.value = "当前环境不支持定位（需要 HTTPS），手动选个城市吧";
-    return;
+    return false;
   }
   locating.value = true;
   clearWeather();
@@ -153,7 +161,7 @@ async function locateWeather() {
     const info = await agentApi.fetchWeatherByCoords(position.coords.latitude, position.coords.longitude);
     if (!info || !info.city) {
       weatherError.value = "没定位到可用的城市天气，手动选一个吧；也可以直接生成（不带天气）";
-      return;
+      return false;
     }
     const city = info.city.trim();
     // 定位城市不在全国列表（少见，如自治州）时，动态补一个"定位城市"分组保证可回显
@@ -168,6 +176,7 @@ async function locateWeather() {
     weatherProvinceInput.value = province;
     weatherCityInput.value = city;
     applyWeather(info, city);
+    return true;
   } catch (e) {
     const code = (e as GeolocationPositionError)?.code;
     weatherError.value = code === 1
@@ -177,6 +186,7 @@ async function locateWeather() {
         : code === 3
           ? "定位超时，再试一次或手动选择城市"
           : "定位失败，可以手动选择城市";
+    return false;
   } finally {
     locating.value = false;
   }
@@ -190,12 +200,14 @@ async function toggleWeather(on: boolean) {
     clearWeather();
     return;
   }
-  // 勾选：先确保城市列表就绪，再带出记住的省份/城市自动查一次
-  await ensureCityGroups();
-  const remembered = weatherCityInput.value.trim();
-  if (remembered) {
-    weatherProvinceInput.value = findProvince(remembered);
-    void queryWeather();
+  // 勾选：优先自动定位；失败（拒绝/超时/不支持）时回退记忆城市自动查一次，再不行才让用户手动选
+  const ok = await locateWeather();
+  if (!ok) {
+    const remembered = weatherCityInput.value.trim();
+    if (remembered) {
+      weatherProvinceInput.value = findProvince(remembered);
+      void queryWeather();
+    }
   }
 }
 
@@ -230,6 +242,7 @@ async function submit() {
     return;
   }
   submitting.value = true;
+  const startedAt = Date.now();
   try {
     // 创建会话：后端计算行动指数/劝说模式，并生成答案之书与塔罗牌
     // 补充条件未填写时传空字符串，后端视为无补充
@@ -242,6 +255,9 @@ async function submit() {
       walletScore: form.category === "shopping" ? form.walletScore ?? null : null,
     };
     const session = await store.createSession(payload);
+    // 答案已返回：补足最短展示时长；响应慢时也再停留片刻，让动画被看见
+    const elapsed = Date.now() - startedAt;
+    await sleep(Math.max(THINKING_MIN_MS - elapsed, THINKING_LINGER_MS));
     router.push(`/session/${session.sessionId}`);
   } catch (e) {
     errorMsg.value = (e as Error).message;
@@ -279,7 +295,7 @@ function reset() {
   <PageWrapper title="新的一次纠结" subtitle="CREATE A NEW DECISION">
     <!-- 散落装饰：波点簇 + 手绘方框 -->
     <DecorDotCluster
-      :count="24"
+      :count="40"
       :spread="100"
       :safe-inset="60"
       :hollow-ratio="0.35"
@@ -301,10 +317,23 @@ function reset() {
       />
     </div>
 
+    <!-- Agent 思考中全屏遮罩：Teleport 到 body 居中展示，波点从小到大再从大到小波动 -->
+    <Teleport to="body">
+      <Transition name="thinking-fade">
+        <div
+          v-if="submitting"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-sketch-bg/95"
+        >
+          <SketchThinkingDots label="Agent 思考中" sub-label="THINKING" />
+        </div>
+      </Transition>
+    </Teleport>
+
     <div class="grid grid-cols-1 lg:grid-cols-5 gap-10">
-      <!-- 左侧：主表单 -->
-      <div class="lg:col-span-3">
-        <SketchBorder padding="5rem">
+      <!-- 左侧：主表单（移动端排第二：先看指南再填） -->
+      <div class="lg:col-span-3 order-2 lg:order-1">
+        <!-- 响应式内边距：手机 1.5rem / 平板 3rem / 桌面 5rem，避免窄屏内容被压挤 -->
+        <SketchBorder class="p-6 md:p-12 lg:p-20">
           <form class="space-y-8" @submit.prevent="submit">
             <!-- 任务内容 -->
             <div>
@@ -313,7 +342,6 @@ function reset() {
                 v-model="form.taskContent"
                 class="sketch-input mt-2 w-full resize-none"
                 rows="2"
-                placeholder="例如：完成项目周报并同步给团队"
               />
             </div>
 
@@ -363,15 +391,15 @@ function reset() {
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <DualTextBlock cn="预计耗时（可选）" en="COST (MIN, OPTIONAL)" size="sm" weight="normal" />
-                <input type="number" min="1" v-model.number="form.expectCostMin" class="sketch-input mt-2 w-full" placeholder="—" />
+                <input type="number" min="1" v-model.number="form.expectCostMin" class="sketch-input mt-2 h-9 w-full" placeholder="—" />
               </div>
               <div>
                 <DualTextBlock cn="截止时间（可选）" en="DEADLINE (OPTIONAL)" size="sm" weight="normal" />
-                <SketchDatePicker v-model="form.deadline" placeholder="选个时间" class="mt-2" />
+                <SketchDatePicker v-model="form.deadline"  class="mt-2" />
               </div>
               <div>
                 <DualTextBlock cn="地点（可选）" en="LOCATION (OPTIONAL)" size="sm" weight="normal" />
-                <input type="text" v-model="form.location" class="sketch-input mt-2 w-full" placeholder="公司 / 家" />
+                <SketchPlacePicker v-model="form.location" class="mt-2" />
               </div>
             </div>
 
@@ -544,8 +572,8 @@ function reset() {
         </SketchBorder>
       </div>
 
-      <!-- 右侧：说明装饰 -->
-      <div class="lg:col-span-2 space-y-6">
+      <!-- 右侧：说明装饰（移动端排第一，指南先展示） -->
+      <div class="lg:col-span-2 order-1 lg:order-2 space-y-6">
         <SketchBorder padding="2rem">
           <DualTextBlock cn="如何填写" en="HOW TO FILL" size="md" weight="normal" />
           <ul class="mt-4 space-y-3 text-sm font-light text-sketch-lineSub">
@@ -556,10 +584,21 @@ function reset() {
           </ul>
         </SketchBorder>
 
-        <div class="flex justify-center">
+        <div class="hidden lg:flex justify-center">
           <SketchCheckbox :size="120" :rotate="3" decorative />
         </div>
       </div>
     </div>
   </PageWrapper>
 </template>
+
+<style scoped>
+.thinking-fade-enter-active,
+.thinking-fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+.thinking-fade-enter-from,
+.thinking-fade-leave-to {
+  opacity: 0;
+}
+</style>

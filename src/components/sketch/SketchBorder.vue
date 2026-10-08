@@ -8,7 +8,7 @@ interface Props {
 }
 
 withDefaults(defineProps<Props>(), {
-  padding: "2rem",
+  padding: undefined,
   radius: 18,
 });
 </script>

@@ -1,6 +1,7 @@
 // 任务表：用户提交的决策输入
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, CreateDateColumn, JoinColumn } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
+import { encryptedTransformer } from '../../common/crypto/field-crypto';
 
 @Entity()
 export class Task {
@@ -16,8 +17,8 @@ export class Task {
   @Column()
   userId: number;
 
-  /** 任务内容 */
-  @Column({ type: 'text' })
+  /** 任务内容（加密存储） */
+  @Column({ type: 'text', transformer: encryptedTransformer })
   taskContent: string;
 
   /** 纠结分类：work工作 / study学习 / life生活琐事 / shopping消费购物 / health健康 / social社交 / other其他 */
@@ -56,8 +57,8 @@ export class Task {
   @Column({ type: 'boolean', default: true })
   enableAnswerBook: boolean;
 
-  /** 补充条件（可选：一句话描述不全时的背景/约束，空字符串表示无补充） */
-  @Column({ type: 'varchar', length: 500, default: '' })
+  /** 补充条件（可选：一句话描述不全时的背景/约束，空字符串表示无补充；加密存储，密文膨胀故用 text） */
+  @Column({ type: 'text', transformer: encryptedTransformer })
   extraContext: string;
 
   /** 今日天气·城市（勾选天气加成时填写，如 Wuhan/武汉） */

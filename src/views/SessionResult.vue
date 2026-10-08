@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 会话统一页 /session/:id【核心页面】
-// Agent 结果 + 历史详情合并：时钟/建议/任务输入/历史摘要/真实反馈/删除 全部在同一页
+// Agent 结果 + 历史详情合并：时钟/建议/任务输入/真实反馈/删除 全部在同一页
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAgentStore } from "@/store/agentStore";
@@ -44,6 +44,9 @@ const askAddTodo = ref(false);
 const addingTodo = ref(false);
 // Agent 二次回复（提交后优先用接口实时返回，历史回看用 record 里的持久化值）
 const replyText = ref("");
+// 行内错误提示：反馈区与删除区分开，样式与全站错误条一致
+const feedbackError = ref("");
+const deleteError = ref("");
 
 const choiceMeta: Record<FeedbackChoice, { cn: string; symbol: string; accept: boolean }> = {
   accept: { cn: "我接受", symbol: "✓", accept: true },
@@ -58,12 +61,27 @@ const confirmOpen = ref(false);
 const linkedTodo = computed(() =>
   todoStore.list.find((t) => t.sessionId === sessionId.value)
 );
-const inTodoList = computed(() => !!linkedTodo.value);
+// 已归档的待办同样算「已加入」：归档代表这轮计划已完成收尾，
+// 历史详情不应把它当成「未加入」而再次提供加入按钮（否则会重复入表）
+const linkedArchivedTodo = computed(() =>
+  todoStore.archivedItems.find((t) => t.sessionId === sessionId.value)
+);
+const inTodoList = computed(
+  () => !!linkedTodo.value || !!linkedArchivedTodo.value
+);
 
 const record = computed(() => store.getSessionWithTask(sessionId.value)?.record ?? null);
 
+// 待办不存在时的细分：做出决定时曾选「加入计划表」→ 待办后来被删（移出/删除归档）；
+// addToTodo 为 false → 从未加入。旧数据无此字段按未加入处理。
+const todoWasAdded = computed(() => record.value?.addToTodo === true);
+
 onMounted(async () => {
-  if (userStore.isLoggedIn && !todoStore.loaded) await todoStore.loadTodos();
+  if (userStore.isLoggedIn) {
+    if (!todoStore.loaded) await todoStore.loadTodos();
+    // 归档记录也要拉：判断会话待办是否已归档（避免归档后误显示「未加入」）
+    void todoStore.loadArchived();
+  }
   const detail = await store.fetchHistory(sessionId.value);
   if (detail) {
     session.value = detail.session;
@@ -121,7 +139,7 @@ async function doSubmit(acceptChoice: boolean, addToTodo: boolean) {
     });
     // store 内部吞掉异常并返回 undefined：提交失败时停留原状态，允许重试
     if (!saved) {
-      window.alert("反馈提交失败，请确认后端已启动后重试");
+      feedbackError.value = "反馈提交失败，请确认后端已启动后重试";
       return;
     }
     submitted.value = true;
@@ -137,11 +155,12 @@ async function doSubmit(acceptChoice: boolean, addToTodo: boolean) {
 async function confirmAddTodo() {
   if (addingTodo.value || !session.value) return;
   addingTodo.value = true;
+  feedbackError.value = "";
   try {
     await addIntoTodoList(false);
     await doSubmit(true, true);
   } catch (e) {
-    window.alert((e as Error).message || "加入计划表失败，请重试");
+    feedbackError.value = (e as Error).message || "加入计划表失败，请重试";
   } finally {
     addingTodo.value = false;
   }
@@ -186,6 +205,7 @@ async function reAddTodo() {
 // 点击「删除记录」：只打开确认弹窗
 function deleteRecord() {
   if (deleting.value || !session.value) return;
+  deleteError.value = "";
   confirmOpen.value = true;
 }
 
@@ -199,7 +219,7 @@ async function confirmDelete() {
     router.push("/");
   } catch (e) {
     confirmOpen.value = false;
-    window.alert((e as Error).message || "删除失败，请稍后再试");
+    deleteError.value = (e as Error).message || "删除失败，请稍后再试";
     deleting.value = false;
   }
 }
@@ -224,7 +244,7 @@ const categoryLabel: Record<string, string> = {
   <PageWrapper full>
     <!-- 波点装饰簇（PageWrapper 父容器自带 relative） -->
     <DecorDotCluster
-      :count="26"
+      :count="40"
       :spread="110"
       :safe-inset="50"
       :hollow-ratio="0.3"
@@ -266,6 +286,11 @@ const categoryLabel: Record<string, string> = {
           </span>
         </div>
       </div>
+
+      <!-- 删除失败：行内错误条（样式与全站一致） -->
+      <p v-if="deleteError" class="-mt-4 mb-6 text-xs text-sketch-line border border-sketch-line/40 px-3 py-2">
+        {{ deleteError }}
+      </p>
 
       <!-- 主体：左时钟 + 右文案 -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-10 lg:gap-16 flex-1">
@@ -379,17 +404,14 @@ const categoryLabel: Record<string, string> = {
             </p>
           </div>
 
-          <!-- 历史真实行为摘要 -->
-          <div class="sketch-border-l">
-            <DualTextBlock cn="历史真实行为摘要" en="HISTORY SUMMARY" size="sm" weight="normal" />
-            <p class="mt-2 text-sm font-light text-sketch-lineSub leading-relaxed">
-              {{ session.historySummary }}
-            </p>
-          </div>
-
           <!-- 用户真实反馈 / 决策区 -->
           <SketchBorder padding="2rem">
             <DualTextBlock cn="你的决定与反馈" en="YOUR DECISION & FEEDBACK" size="md" weight="normal" />
+
+            <!-- 反馈提交/入表失败：行内错误条 -->
+            <p v-if="feedbackError" class="mt-3 text-xs text-sketch-line border border-sketch-line/40 px-3 py-2">
+              {{ feedbackError }}
+            </p>
 
             <!-- 未反馈：可选评论 + 做决定（接受后先追问是否入计划表，再一起提交） -->
             <div v-if="!submitted" class="mt-4 space-y-4">
@@ -465,23 +487,29 @@ const categoryLabel: Record<string, string> = {
               <!-- 计划状态 -->
               <div v-if="accepted" class="pt-3 sketch-border-t flex flex-wrap items-center gap-3">
                 <template v-if="inTodoList">
-                  <!-- 静态状态方框：done 显示对勾 -->
+                  <!-- 静态状态方框：done 或已归档显示对勾 -->
                   <svg width="18" height="18" viewBox="0 0 40 40" class="shrink-0">
                     <rect x="3" y="3" width="34" height="34" class="sketch-stroke" stroke-width="2.1" />
                     <path
-                      v-if="linkedTodo?.done"
+                      v-if="linkedTodo?.done || linkedArchivedTodo"
                       class="sketch-stroke"
                       stroke-width="2.4"
                       d="M11,21 L18,28 L30,14"
                     />
                   </svg>
                   <span class="text-sm font-light">
-                    {{ linkedTodo?.done ? "该待办已完成。" : "已加入计划表，去首页勾选完成吧。" }}
+                    {{
+                      linkedTodo
+                        ? linkedTodo.done
+                          ? "该待办已完成。"
+                          : "已加入计划表，去首页勾选完成吧。"
+                        : "该待办已归档"
+                    }}
                   </span>
                 </template>
                 <template v-else>
                   <span class="text-sm font-light text-sketch-lineSub">
-                    这条建议没有进入计划表。
+                    {{ todoWasAdded ? "该待办已删除，可以重新加入计划表。" : "这条建议没有进入计划表。" }}
                   </span>
                   <LinearButton size="sm" :disabled="reAdding" @click="reAddTodo">
                     {{ reAdding ? "加入中…" : "加入计划表" }}

@@ -1,0 +1,24 @@
+# 服务器部署：Redis 容器（验证码存储）
+# 后端用 pm2 直接跑在宿主机（连宿主机 MySQL 最省事，不用处理容器网络）
+# 用法：
+#   1. 服务器上 clone 代码，cd action-agent-nest
+#   2. npm install && npm run build
+#   3. 配置 .env（DB_SYNCHRONIZE=false、DATA_ENCRYPTION_KEY、CORS_ORIGINS 等）
+#   4. docker compose up -d  ← 启动 Redis
+#   5. pm2 start dist/main.js --name jdi-backend  ← 启动后端
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    # 只绑宿主机 127.0.0.1，不暴露公网
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  redis_data:

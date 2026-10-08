@@ -3,6 +3,7 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Todo } from './entities/todo.entity';
+import { ActionRecord } from './entities/action-record.entity';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
 
@@ -11,6 +12,8 @@ export class TodoService {
   constructor(
     @InjectRepository(Todo)
     private readonly todoRepo: Repository<Todo>,
+    @InjectRepository(ActionRecord)
+    private readonly recordRepo: Repository<ActionRecord>,
   ) {}
 
   /** 当前用户未归档待办（未完成在前，同组内新的在前） */
@@ -42,6 +45,15 @@ export class TodoService {
       completedAt: dto.done && dto.completedAt ? new Date(dto.completedAt) : null,
     });
     const saved = await this.todoRepo.save(todo);
+    // 带会话的待办落库即视为「加入过计划表」：待办日后被删时，
+    // 历史详情能正确显示「该待办已删除」而非「没有进入计划表」（旧记录回填漏网的兜底）
+    if (saved.sessionId) {
+      try {
+        await this.recordRepo.update({ sessionId: saved.sessionId }, { addToTodo: true });
+      } catch {
+        // 标记失败不影响待办创建本身
+      }
+    }
     return this.toRes(saved);
   }
 

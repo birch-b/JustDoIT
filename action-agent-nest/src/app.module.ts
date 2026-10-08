@@ -28,7 +28,8 @@ import configuration from './config/configuration';
         password: configService.get('database.password'), //密码
         database: configService.get('database.database'), //库名
         entities: [__dirname + '/**/*.entity{.ts,.js}'], //扫描实体类
-        synchronize: true, // 开发自动建表；生产务必关闭，用迁移
+        // 由环境变量 DB_SYNCHRONIZE 控制：本地 true 自动建表，生产 false 防止 ALTER 丢数据
+        synchronize: configService.get<boolean>('database.synchronize'),
         autoLoadEntities: true, // 自动加载实体
         charset: 'utf8mb4' // 支持emoji完整utf8
       }),

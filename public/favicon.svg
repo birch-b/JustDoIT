@@ -1,7 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
-  <rect width="40" height="40" fill="#48bcb0" />
-  <circle cx="20" cy="20" r="15" fill="none" stroke="#ffffff" stroke-width="1.4" />
-  <line x1="20" y1="20" x2="20" y2="9" stroke="#ffffff" stroke-width="1.4" />
-  <line x1="20" y1="20" x2="28" y2="20" stroke="#ffffff" stroke-width="1.4" />
-  <circle cx="20" cy="20" r="2" fill="#ffffff" />
+  <!-- 奶米底 + 炭棕手绘外框（贝塞尔微不规则，呼应 SketchBorder） -->
+  <path
+    d="M9.5,3 C20,2.2 31,3 37,9.5 C37.8,20 37,31 30.5,37 C20,37.8 9,37 3,30.5 C2.2,20 3,9 9.5,3 Z"
+    fill="#FFF2E1"
+    stroke="#634442"
+    stroke-width="2"
+    stroke-linejoin="round"
+  />
+  <!-- 薄荷绿内层装饰框 -->
+  <path
+    d="M10.5,6.5 C20,5.9 29.5,6.5 33.5,10.5 C34.1,20 33.5,29.5 29.5,33.5 C20,34.1 10.5,33.5 6.5,29.5 C5.9,20 6.5,10.5 10.5,6.5 Z"
+    fill="none"
+    stroke="#A9C8C2"
+    stroke-width="1"
+    opacity="0.8"
+  />
+  <!-- 品牌时钟（与 NavBar logo 同构：指向 12 点与 3 点；描边略加粗保证 16px 下清晰） -->
+  <circle cx="20" cy="20" r="8.5" fill="none" stroke="#634442" stroke-width="2" />
+  <line x1="20" y1="20" x2="20" y2="14" stroke="#634442" stroke-width="2" stroke-linecap="round" />
+  <line x1="20" y1="20" x2="24.8" y2="20" stroke="#634442" stroke-width="2" stroke-linecap="round" />
+  <circle cx="20" cy="20" r="1.6" fill="#634442" />
 </svg>

@@ -140,8 +140,8 @@ export class AgentService {
     });
     const savedSession = await this.sessionRepo.save(session);
 
-    // 复用开头算好的历史摘要（给 SessionResult 页面展示），不再重复查询
-    return this.toSessionRes(savedSession, tarotCards, answerBook, historySummary);
+    // 复用开头算好的历史摘要只喂 prompt，不再随响应返回（页面展示已移除，避免与关键词重叠）
+    return this.toSessionRes(savedSession, tarotCards, answerBook);
   }
 
   /** 会话详情（校验归属） */
@@ -165,12 +165,8 @@ export class AgentService {
         })
       : [];
 
-    // 每条会话动态计算 historySummary（反映用户当前真实历史状态）
-    const details = await Promise.all(
-      sessions.map(async (s) => {
-        const dynamicSummary = await this.buildHistorySummary(userId, s.task.category);
-        return this.toHistoryDetail(s, records.find((r) => r.sessionId === s.id) ?? null, dynamicSummary);
-      }),
+    const details = sessions.map((s) =>
+      this.toHistoryDetail(s, records.find((r) => r.sessionId === s.id) ?? null),
     );
     return details;
   }
@@ -247,8 +243,7 @@ export class AgentService {
   async getHistory(userId: number, sessionId: number) {
     const session = await this.findOwnedSession(userId, sessionId);
     const record = await this.recordRepo.findOne({ where: { sessionId } });
-    const dynamicSummary = await this.buildHistorySummary(userId, session.task.category);
-    return this.toHistoryDetail(session, record ?? null, dynamicSummary);
+    return this.toHistoryDetail(session, record ?? null);
   }
 
   /** 提交/更新行为反馈（按会话 upsert，校验归属）；写入后异步对齐长期记忆（3.4） */
@@ -264,10 +259,13 @@ export class AgentService {
       record.actualCostMin = dto.actualCostMin;
       record.executeResult = dto.executeResult ?? '';
       if (comment !== undefined) record.feedbackComment = comment;
+      // 执行回写不带 addToTodo：仅在显式给出时更新，避免覆盖做出决定时的值
+      if (dto.addToTodo !== undefined) record.addToTodo = dto.addToTodo === true;
     } else {
       record = this.recordRepo.create({
         sessionId: dto.sessionId,
         userAcceptSuggest: dto.userAcceptSuggest,
+        addToTodo: dto.addToTodo === true,
         isExecute: dto.isExecute,
         actualCostMin: dto.actualCostMin,
         executeResult: dto.executeResult ?? '',
@@ -576,12 +574,7 @@ export class AgentService {
   }
 
   /** TaskSession 实体 → 前端 AgentSessionRes */
-  private toSessionRes(
-    s: TaskSession,
-    parsedCards?: string[],
-    answer?: string | null,
-    dynamicSummary?: string,
-  ) {
+  private toSessionRes(s: TaskSession, parsedCards?: string[], answer?: string | null) {
     const tarotCards =
       parsedCards ?? (s.tarotCards ? (JSON.parse(s.tarotCards) as string[]) : undefined);
     return {
@@ -596,14 +589,13 @@ export class AgentService {
       tarotReading: s.tarotReading ?? undefined,
       answerBook: answer !== undefined ? answer ?? undefined : s.answerBook ?? undefined,
       answerBookReading: s.answerBookReading ?? undefined,
-      historySummary: dynamicSummary ?? s.historySummary,
     };
   }
 
   /** 实体组装 → 前端 HistoryDetail */
-  private toHistoryDetail(s: TaskSession, record: ActionRecord | null, dynamicSummary?: string) {
+  private toHistoryDetail(s: TaskSession, record: ActionRecord | null) {
     return {
-      session: this.toSessionRes(s, undefined, undefined, dynamicSummary),
+      session: this.toSessionRes(s),
       task: {
         taskContent: s.task.taskContent,
         category: s.task.category,
@@ -634,6 +626,7 @@ export class AgentService {
       recordId: r.id,
       sessionId: r.sessionId,
       userAcceptSuggest: r.userAcceptSuggest,
+      addToTodo: r.addToTodo ?? false,
       isExecute: r.isExecute,
       actualCostMin: r.actualCostMin,
       executeResult: r.executeResult ?? '',

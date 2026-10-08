@@ -15,8 +15,8 @@ import { LlmService } from '../agent/llm.service';
 import { buildInsightPrompt, buildMemorySummaryPrompt, LlmMemoryInsight } from './memory-insight.prompt';
 import { MEMORY_TYPES } from './dto/create-memory.dto';
 
-/** 行为样本少于该数不调 LLM（证据不足，防过度推断） */
-const MIN_SAMPLES_FOR_LLM = 5;
+/** 行为样本少于该数不调 LLM（证据不足，防过早下结论） */
+const MIN_SAMPLES_FOR_LLM = 10;
 /** 同一用户两次提炼的最小间隔（内存节流，重启即重置） */
 const THROTTLE_MS = 10 * 60 * 1000;
 /** 单次最多提炼条数（prompt 同步约束，这里做硬校验） */

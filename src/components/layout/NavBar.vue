@@ -65,8 +65,8 @@ function logout() {
           </svg>
           <div class="leading-tight">
             <p class="text-lg font-light tracking-wide">JUST DO IT</p>
-            <p class="text-[12px] font-light text-sketch-lineSub font-en tracking-widest">
-              试一下呢
+            <p class="text-[12px] font-light text-sketch-lineSub tracking-widest">
+              拍板大王
             </p>
           </div>
         </RouterLink>

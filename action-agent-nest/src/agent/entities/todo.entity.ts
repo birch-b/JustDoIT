@@ -8,6 +8,7 @@ import {
   CreateDateColumn,
 } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
+import { encryptedTransformer } from '../../common/crypto/field-crypto';
 
 @Entity()
 export class Todo {
@@ -23,8 +24,8 @@ export class Todo {
   @Column()
   userId: number;
 
-  /** 待办内容 */
-  @Column({ type: 'text' })
+  /** 待办内容（加密存储） */
+  @Column({ type: 'text', transformer: encryptedTransformer })
   taskContent: string;
 
   /** 纠结分类：work/study/life/shopping/health/social/other */

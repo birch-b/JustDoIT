@@ -93,7 +93,7 @@ async function submit() {
 <template>
   <PageWrapper full>
     <DecorDotCluster
-      :count="24"
+      :count="40"
       :spread="100"
       :safe-inset="60"
       :hollow-ratio="0.35"

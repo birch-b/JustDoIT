@@ -6,7 +6,10 @@ export default () => ({
     port: parseInt(process.env.MYSQL_PORT!,10),
     username: process.env.MYSQL_USER,
     password: process.env.MYSQL_PASSWORD,
-    database: process.env.MYSQL_DATABASE
+    database: process.env.MYSQL_DATABASE,
+    // 实体改动是否自动同步表结构：本地开发 true，生产必须 false（防 ALTER 丢数据）
+    // 生产改表结构走人工 SQL / 迁移脚本，不靠 ORM 自动改
+    synchronize: process.env.DB_SYNCHRONIZE !== 'false',
   },
   jwt: {
     secret: process.env.JWT_SECRET,

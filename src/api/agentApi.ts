@@ -157,6 +157,29 @@ export const agentApi = {
       return null;
     }
   },
+
+  /**
+   * 地点搜索：GET /api/agent/place-search?keyword=xxx[&lat=&lng=][&city=]
+   * 有坐标时后端按距离排序（浏览器定位，WGS84）；无坐标但有城市时只搜该城市；
+   * 都无时全国搜索。未配置百度 ak 或失败时返回 null
+   */
+  async placeSearch(
+    keyword: string,
+    coords?: { lat: number; lng: number } | null,
+    city?: string,
+  ): Promise<{ name: string; address: string }[] | null> {
+    try {
+      let url = `/api/agent/place-search?keyword=${encodeURIComponent(keyword)}`;
+      if (coords) url += `&lat=${coords.lat}&lng=${coords.lng}`;
+      if (city) url += `&city=${encodeURIComponent(city)}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = (await res.json()) as { code: number; data: { name: string; address: string }[] | null };
+      return Array.isArray(data?.data) ? data.data : null;
+    } catch {
+      return null;
+    }
+  },
 };
 
 /** 首页卡片列表由 HistoryDetail[] 映射得到 */

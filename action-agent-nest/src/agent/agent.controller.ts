@@ -3,6 +3,7 @@ import { AnswerBookService } from './answerbook.service';
 import { TarotService, TarotResult } from './tarot.service';
 import { WeatherService, WeatherInfo } from './weather.service';
 import { CityService, CityGroup } from './city.service';
+import { PlaceService, PlaceItem } from './place.service';
 import { AgentService } from './agent.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { ActionRecordDto } from './dto/action-record.dto';
@@ -17,6 +18,7 @@ export class AgentController {
     private readonly tarotService: TarotService,
     private readonly weatherService: WeatherService,
     private readonly cityService: CityService,
+    private readonly placeService: PlaceService,
     private readonly agentService: AgentService,
   ) {}
 
@@ -67,6 +69,26 @@ export class AgentController {
   @Get('cities')
   async cities(): Promise<{ code: number; data: CityGroup[] | null }> {
     const data = await this.cityService.getCityGroups();
+    return { code: 0, data };
+  }
+
+  /**
+   * 地点搜索：GET /api/agent/place-search?keyword=xxx[&lat=&lng=][&city=]
+   * 有坐标（WGS84）时按距离排序；无坐标但有城市时只搜该市；公开接口，失败时 data 为 null
+   */
+  @Get('place-search')
+  async placeSearch(
+    @Query('keyword') keyword: string,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+    @Query('city') city?: string,
+  ): Promise<{ code: number; data: PlaceItem[] | null }> {
+    const data = await this.placeService.search(
+      keyword ?? '',
+      lat !== undefined ? Number(lat) : undefined,
+      lng !== undefined ? Number(lng) : undefined,
+      city,
+    );
     return { code: 0, data };
   }
 

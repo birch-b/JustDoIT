@@ -136,7 +136,7 @@ function formatDate(iso: string): string {
 <template>
   <PageWrapper full title="个人中心" subtitle="PROFILE">
     <DecorDotCluster
-      :count="26"
+      :count="40"
       :spread="110"
       :safe-inset="50"
       :hollow-ratio="0.3"

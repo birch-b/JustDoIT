@@ -7,7 +7,6 @@ const props = withDefaults(defineProps<{
   modelValue: string | null; // ISO 字符串 "YYYY-MM-DDTHH:mm"
   placeholder?: string;
 }>(), {
-  placeholder: "选个时间",
 });
 
 const emit = defineEmits<{
@@ -147,26 +146,28 @@ const displayText = computed(() => {
 
 // 小时/分钟选项
 const hours = Array.from({ length: 24 }, (_, i) => i);
-const minutes = [0, 15, 30, 45];
+const minutes = Array.from({ length: 60 }, (_, i) => i);
 const pad2 = (n: number) => String(n).padStart(2, "0");
 </script>
 
 <template>
   <div ref="rootEl" class="relative select-none">
-    <!-- 触发区 -->
+    <!-- 触发区：高度/图标定位与 SketchPlacePicker 完全一致，保证三列下划线齐平、图标对齐 -->
     <button
       type="button"
-      class="sketch-input w-full flex items-center justify-between gap-1 text-left"
+      class="sketch-input relative h-9 w-full pr-8 text-left"
       :aria-expanded="open"
       @click="toggleOpen"
     >
       <span :class="selectedDate ? '' : 'text-sketch-lineSub'">{{ displayText }}</span>
-      <svg class="w-4 h-4 shrink-0" viewBox="0 0 16 16" fill="none" stroke="#634442" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="2" y="3" width="12" height="11" rx="2" ry="2"/>
-        <line x1="2" y1="7" x2="14" y2="7"/>
-        <line x1="6" y1="1" x2="6" y2="5"/>
-        <line x1="10" y1="1" x2="10" y2="5"/>
-      </svg>
+      <span class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+        <svg class="w-4 h-4 shrink-0 text-sketch-lineSub" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="12" height="11" rx="2" ry="2"/>
+          <line x1="2" y1="7" x2="14" y2="7"/>
+          <line x1="6" y1="1" x2="6" y2="5"/>
+          <line x1="10" y1="1" x2="10" y2="5"/>
+        </svg>
+      </span>
     </button>
 
     <!-- 弹层：方形奶米底 + 手绘边框 -->
@@ -255,11 +256,12 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
                 <path d="M1,1.5 L6,6.5 L11,1.5" stroke="#634442" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
-            <ul
-              v-if="openTimeMenu === 'minute'"
-              class="absolute bottom-full left-1/2 z-50 mb-1 -translate-x-1/2 py-1"
-              style="width:4.5rem;background:#F7F1E5;border:1.5px solid #634442;box-shadow:2px 2px 0 rgba(99,68,66,0.15)"
-            >
+         <ul
+  v-if="openTimeMenu === 'minute'"
+  class="absolute bottom-full left-1/2 z-50 mb-1 -translate-x-1/2 py-1 overflow-y-auto"
+  style="width:4.5rem;max-height:8.4rem;background:#F7F1E5;border:1.5px solid #634442;box-shadow:2px 2px 0 rgba(99,68,66,0.15)"
+>
+
               <li
                 v-for="m in minutes"
                 :key="m"

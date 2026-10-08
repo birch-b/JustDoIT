@@ -41,6 +41,10 @@ async function post<T>(url: string, body: unknown): Promise<T> {
     | null;
 
   if (!res.ok) {
+    // 服务端 5xx：后端重启/网关故障，给友好提示而非裸状态码
+    if (res.status >= 500) {
+      throw new Error("服务器暂时不可用，请稍后重试");
+    }
     const msg = data?.message;
     throw new Error(
       Array.isArray(msg) ? msg.join("；") : msg || "请求失败，请稍后重试",

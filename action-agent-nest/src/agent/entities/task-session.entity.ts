@@ -8,6 +8,7 @@ import {
   CreateDateColumn,
 } from 'typeorm';
 import { Task } from './task.entity';
+import { encryptedTransformer } from '../../common/crypto/field-crypto';
 
 @Entity()
 export class TaskSession {
@@ -27,20 +28,20 @@ export class TaskSession {
   @Column({ type: 'int' })
   agentSuggestIndex: number;
 
-  /** 结论（中文） */
-  @Column({ type: 'varchar', length: 100 })
+  /** 结论（中文；加密存储，密文膨胀故用 text） */
+  @Column({ type: 'text', transformer: encryptedTransformer })
   conclusion: string;
 
   /** 劝说模式 */
   @Column({ type: 'varchar', length: 20 })
   persuadeMode: string;
 
-  /** 劝说文案 */
-  @Column({ type: 'text' })
+  /** 劝说文案（加密存储） */
+  @Column({ type: 'text', transformer: encryptedTransformer })
   persuadeText: string;
 
-  /** 最小行动 */
-  @Column({ type: 'text' })
+  /** 最小行动（加密存储） */
+  @Column({ type: 'text', transformer: encryptedTransformer })
   minAction: string;
 
   /** 塔罗牌（可为空） */
@@ -51,16 +52,16 @@ export class TaskSession {
   @Column({ type: 'text', nullable: true })
   tarotCards: string | null;
 
-  /** 塔罗牌一句话解析（LLM 结合任务生成，可为空） */
-  @Column({ type: 'varchar', length: 200, nullable: true })
+  /** 塔罗牌一句话解析（LLM 结合任务生成，可为空；加密存储，密文膨胀故用 text） */
+  @Column({ type: 'text', nullable: true, transformer: encryptedTransformer })
   tarotReading: string | null;
 
-  /** 答案之书的回答（可为空） */
-  @Column({ type: 'varchar', length: 500, nullable: true })
+  /** 答案之书的回答（可为空；加密存储，密文膨胀故用 text） */
+  @Column({ type: 'text', nullable: true, transformer: encryptedTransformer })
   answerBook: string | null;
 
-  /** 答案之书一句话解读（LLM 顺着随机答案的意象写，圆回主结论，可为空） */
-  @Column({ type: 'varchar', length: 200, nullable: true })
+  /** 答案之书一句话解读（LLM 顺着随机答案的意象写，圆回主结论，可为空；加密存储，密文膨胀故用 text） */
+  @Column({ type: 'text', nullable: true, transformer: encryptedTransformer })
   answerBookReading: string | null;
 
   /** 历史行为摘要（读时动态生成，列仅兼容老数据保留） */

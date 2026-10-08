@@ -22,8 +22,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: '其他',
 };
 
-/** 每类最少已反馈样本数，低于此不生成任何记忆（防止单次行为形成结论） */
-const MIN_SAMPLES = 3;
+/** 每类最少已反馈样本数，低于此不生成任何记忆（防止少量行为过早下结论） */
+const MIN_SAMPLES = 5;
 const RATE_HIGH = 0.7;
 const RATE_LOW = 0.3;
 /** 接受倾向：10 个同向样本证据度拉满；执行是更强信号，6 个样本即拉满 */

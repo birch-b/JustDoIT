@@ -10,6 +10,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
+import { encryptedTransformer } from '../../common/crypto/field-crypto';
 
 @Entity()
 export class UserMemory {
@@ -29,8 +30,8 @@ export class UserMemory {
   @Column({ type: 'varchar', length: 30 })
   memoryType: string;
 
-  /** 记忆内容（自然语言短句，如"对耗时超 60 分钟的任务容易拖延"） */
-  @Column({ type: 'varchar', length: 500 })
+  /** 记忆内容（自然语言短句，如"对耗时超 60 分钟的任务容易拖延"；加密存储，密文膨胀故用 text） */
+  @Column({ type: 'text', transformer: encryptedTransformer })
   content: string;
 
   /** 3~5 字短关键词，仅用于统计页气泡渲染；3.5 由 LLM 提炼、3.4 随模板生成，老数据可为空 */

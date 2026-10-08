@@ -9,10 +9,12 @@ import LinearButton from "@/components/sketch/LinearButton.vue";
 import SketchClock from "@/components/sketch/SketchClock.vue";
 import SketchBorder from "@/components/sketch/SketchBorder.vue";
 import SketchCheckbox from "@/components/sketch/SketchCheckbox.vue";
+import SketchCaret from "@/components/sketch/SketchCaret.vue";
 import SketchChip from "@/components/sketch/SketchChip.vue";
 import DualTextBlock from "@/components/sketch/DualTextBlock.vue";
 import DecorDotCluster from "@/components/sketch/DecorDotCluster.vue";
 import SketchConfirmDialog from "@/components/sketch/SketchConfirmDialog.vue";
+import SketchNetworkGate from "@/components/sketch/SketchNetworkGate.vue";
 import { useTodoStore } from "@/store/todoStore";
 
 const router = useRouter();
@@ -28,20 +30,14 @@ const isLoggedIn = computed(() => userStore.isLoggedIn);
 const showDone = ref(false);
 // 已完成按分类分组的展开状态（默认全部折叠）
 const doneOpenCats = ref<string[]>([]);
-// 归档记录区域展开状态
-const showArchived = ref(false);
 // 待移出计划表的 todo（确认弹窗）
 const todoToRemove = ref<{ id: number; taskContent: string } | null>(null);
 // 归档确认弹窗
 const showArchiveConfirm = ref(false);
 // 待办是否全部为空（未登录时也视为空，不展示本地数据；加载失败不算空）
-// 有归档记录时不算空：否则全部归档后「归档记录」入口会随空状态一起消失
+// 归档记录不在首页展示（在统计页查看）：全部归档后首页计划表即为「清空」状态
 const todoIsEmpty = computed(
-  () =>
-    !isLoggedIn.value ||
-    (!todoStore.loadError &&
-      todoStore.list.length === 0 &&
-      todoStore.archivedItems.length === 0)
+  () => !isLoggedIn.value || (!todoStore.loadError && todoStore.list.length === 0)
 );
 // 未登录时计数显示 0
 const pendingCount = computed(() =>
@@ -67,7 +63,6 @@ onMounted(() => {
   if (isLoggedIn.value) {
     store.loadSessions();
     todoStore.loadTodos();
-    todoStore.loadArchived();
   } else {
     store.resetSessions();
     todoStore.resetTodos();
@@ -120,9 +115,6 @@ function toggleDoneCat(key: string) {
     : [...doneOpenCats.value, key];
 }
 
-// 归档记录
-const archivedCount = computed(() => todoStore.archivedList.length);
-
 function askRemoveTodo(todo: { id: number; taskContent: string }) {
   todoToRemove.value = todo;
 }
@@ -148,10 +140,23 @@ function retryLoad() {
   todoStore.loadTodos();
 }
 
+// 登录后首次进入的全屏门屏（喜茶小程序式）：本地无任何缓存数据时，
+// 加载中显示波点动画；会话与待办双双拉取失败时显示网络异常页。
+// 已有缓存数据后刷新失败不打断使用，走各区块内联重试。
+const gateState = computed<"loading" | "error" | null>(() => {
+  if (!isLoggedIn.value) return null;
+  const noData = cards.value.length === 0 && todoStore.list.length === 0;
+  if (!noData) return null;
+  if (store.loadError && todoStore.loadError) return "error";
+  const busy = store.loading || (!todoStore.loaded && !todoStore.loadError);
+  return busy ? "loading" : null;
+});
+
 // 批量管理模式
 const selectMode = ref(false);
 const deleting = ref(false);
 const selectedIds = ref<number[]>([]);
+const batchError = ref(""); // 批量删除失败：行内错误条，样式与全站一致
 const selectedCount = computed(() => selectedIds.value.length);
 const allSelected = computed(
   () => cards.value.length > 0 && selectedIds.value.length === cards.value.length,
@@ -189,6 +194,7 @@ const confirmOpen = ref(false);
 async function doBatchDelete() {
   if (deleting.value || !selectedIds.value.length) return;
   deleting.value = true;
+  batchError.value = "";
   try {
     await store.batchDeleteSessions([...selectedIds.value]);
     // 关联待办可能已被后端清理，同步计划表
@@ -197,7 +203,7 @@ async function doBatchDelete() {
     exitSelect();
   } catch (e) {
     confirmOpen.value = false;
-    window.alert((e as Error).message || "删除失败，请稍后再试");
+    batchError.value = (e as Error).message || "删除失败，请稍后再试";
   } finally {
     deleting.value = false;
   }
@@ -235,10 +241,10 @@ function goLogin() {
 </script>
 
 <template>
-  <PageWrapper full title="JUST DO IT" subtitle="试一下呢">
+  <PageWrapper full title="拍板大王" subtitle="JUST DO IT">
     <!-- 波点装饰簇（PageWrapper 父容器自带 relative） -->
     <DecorDotCluster
-      :count="28"
+      :count="40"
       :spread="110"
       :safe-inset="100"
       :hollow-ratio="0.3"
@@ -340,7 +346,7 @@ function goLogin() {
               class="flex items-center gap-2 text-xs text-sketch-lineSub hover:text-sketch-line"
               @click="showDone = !showDone"
             >
-              <span class="inline-block transition-transform duration-300" :style="{ transform: showDone ? 'rotate(90deg)' : 'rotate(0deg)' }">▶</span>
+              <span class="inline-flex items-center text-sketch-lineSub transition-transform duration-300" :style="{ transform: showDone ? 'rotate(90deg)' : 'rotate(0deg)' }"><SketchCaret :size="10" /></span>
               <span>已完成 {{ todoStore.doneList.length }} 项</span>
             </button>
             <button
@@ -362,9 +368,9 @@ function goLogin() {
               >
                 <span class="flex items-center gap-2">
                   <span
-                    class="inline-block transition-transform duration-300 text-sketch-lineSub text-xs"
+                    class="inline-flex items-center text-sketch-lineSub transition-transform duration-300"
                     :style="{ transform: doneOpenCats.includes(g.key) ? 'rotate(90deg)' : 'rotate(0deg)' }"
-                  >▶</span>
+                  ><SketchCaret :size="10" /></span>
                   <span class="text-xs font-light text-sketch-lineSub">{{ g.label }}</span>
                 </span>
                 <span class="text-[10px] text-sketch-lineSub font-en tracking-widest">{{ g.list.length }}</span>
@@ -402,31 +408,6 @@ function goLogin() {
           </div>
         </div>
 
-        <!-- 归档记录入口 -->
-        <div v-if="archivedCount" class="mt-4">
-          <button
-            class="flex items-center gap-2 text-xs text-sketch-lineSub hover:text-sketch-line"
-            @click="showArchived = !showArchived"
-          >
-            <span class="inline-block transition-transform duration-300" :style="{ transform: showArchived ? 'rotate(90deg)' : 'rotate(0deg)' }">▶</span>
-            <span>归档记录 {{ archivedCount }} 项</span>
-          </button>
-
-          <div v-show="showArchived" class="mt-3 space-y-2 opacity-50">
-            <div
-              v-for="todo in todoStore.archivedList"
-              :key="todo.id"
-              class="flex items-center gap-3 px-3 py-2"
-            >
-              <p class="flex-1 min-w-0 text-sm font-light line-through truncate">
-                {{ todo.taskContent }}
-              </p>
-              <SketchChip tag>
-                {{ categoryLabel[todo.category] || todo.category }}
-              </SketchChip>
-            </div>
-          </div>
-        </div>
       </template>
     </section>
 
@@ -472,6 +453,11 @@ function goLogin() {
         </div>
       </div>
 
+      <!-- 批量删除失败：行内错误条 -->
+      <p v-if="selectMode && batchError" class="mb-3 text-xs text-sketch-line border border-sketch-line/40 px-3 py-2">
+        {{ batchError }}
+      </p>
+
       <!-- 加载失败：网络/后端暂时不可用，给重试入口 -->
       <div v-if="sessionLoadFailed" class="flex flex-col items-center justify-center py-20 text-center">
         <SketchBorder padding="2.5rem 3rem" class="max-w-sm">
@@ -514,9 +500,9 @@ function goLogin() {
           >
             <span class="flex items-center gap-2">
               <span
-                class="inline-block transition-transform duration-300 text-sketch-lineSub"
+                class="inline-flex items-center text-sketch-lineSub transition-transform duration-300"
                 :style="{ transform: openCats.includes(g.key) ? 'rotate(90deg)' : 'rotate(0deg)' }"
-              >▶</span>
+              ><SketchCaret :size="12" /></span>
               <span class="text-sm font-light">{{ g.label }}</span>
             </span>
             <span class="text-xs text-sketch-lineSub font-en tracking-widest">
@@ -621,5 +607,8 @@ function goLogin() {
       @confirm="confirmArchiveDone"
       @cancel="showArchiveConfirm = false"
     />
+
+    <!-- 登录后首次加载 / 网络异常全屏门屏（组件内部 Teleport 到 body） -->
+    <SketchNetworkGate v-if="gateState" :state="gateState" @retry="retryLoad" />
   </PageWrapper>
 </template>

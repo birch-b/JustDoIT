@@ -8,6 +8,7 @@ import {
   CreateDateColumn,
 } from 'typeorm';
 import { TaskSession } from './task-session.entity';
+import { encryptedTransformer } from '../../common/crypto/field-crypto';
 
 @Entity()
 export class ActionRecord {
@@ -27,6 +28,10 @@ export class ActionRecord {
   @Column({ type: 'boolean' })
   userAcceptSuggest: boolean;
 
+  /** 做出决定时是否选择加入计划表（用于待办被删后区分「从未加入」和「加入后被删」） */
+  @Column({ type: 'boolean', default: false })
+  addToTodo: boolean;
+
   /** 是否执行 */
   @Column({ type: 'boolean' })
   isExecute: boolean;
@@ -35,16 +40,16 @@ export class ActionRecord {
   @Column({ type: 'int' })
   actualCostMin: number;
 
-  /** 执行结果/备注 */
-  @Column({ type: 'text', nullable: true })
+  /** 执行结果/备注（加密存储） */
+  @Column({ type: 'text', nullable: true, transformer: encryptedTransformer })
   executeResult: string;
 
-  /** 用户对本次建议的可选评论/想说的话（反馈时填写，可空） */
-  @Column({ type: 'varchar', length: 500, nullable: true })
+  /** 用户对本次建议的可选评论/想说的话（反馈时填写，可空；加密存储，密文膨胀故用 text） */
+  @Column({ type: 'text', nullable: true, transformer: encryptedTransformer })
   feedbackComment: string | null;
 
-  /** Agent 收到用户决定（接受/拒绝/是否入计划表/评论）后的二次回复（可空） */
-  @Column({ type: 'varchar', length: 500, nullable: true })
+  /** Agent 收到用户决定（接受/拒绝/是否入计划表/评论）后的二次回复（可空；加密存储，密文膨胀故用 text） */
+  @Column({ type: 'text', nullable: true, transformer: encryptedTransformer })
   agentReply: string | null;
 
   @CreateDateColumn()

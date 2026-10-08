@@ -37,3 +37,6 @@ skills-lock.json
 .env
 .env.*
 !.env.example
+# 文档忽略
+*.md
+*.pdf

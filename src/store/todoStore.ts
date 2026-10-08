@@ -200,6 +200,17 @@ export const useTodoStore = defineStore("todo", {
       }
     },
 
+    /** 删除归档记录：物理删除，关联 session 不受影响 */
+    async removeArchived(id: number): Promise<void> {
+      const prev = this.archivedItems;
+      this.archivedItems = this.archivedItems.filter((t) => t.id !== id);
+      try {
+        await todoApi.remove(id);
+      } catch {
+        this.archivedItems = prev; // 失败回滚
+      }
+    },
+
     /** 归档单条：从 list 移到 archivedItems */
     async archiveTodo(id: number): Promise<void> {
       const item = this.list.find((t) => t.id === id);

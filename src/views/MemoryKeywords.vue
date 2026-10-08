@@ -15,9 +15,17 @@ import SketchBorder from "@/components/sketch/SketchBorder.vue";
 import DualTextBlock from "@/components/sketch/DualTextBlock.vue";
 import LinearButton from "@/components/sketch/LinearButton.vue";
 import SketchConfirmDialog from "@/components/sketch/SketchConfirmDialog.vue";
+import SketchSelect from "@/components/sketch/SketchSelect.vue";
+import DecorDotCluster from "@/components/sketch/DecorDotCluster.vue";
+
 import { isNetworkError, sleep } from "@/api/http";
 
 const INK = "#634442"; // 炭棕墨线
+
+/** 类型选项给 SketchSelect 用 */
+const typeOptions = computed(() =>
+  Object.entries(MEMORY_TYPE_LABEL).map(([value, label]) => ({ label, value }))
+);
 
 /** 确定性伪随机（不用 Math.random，刷新长一样） */
 function rnd(i: number, k: number): number {
@@ -182,7 +190,14 @@ onMounted(load);
 </script>
 
 <template>
+
   <PageWrapper>
+       <DecorDotCluster
+      :count="40"
+      :spread="110"
+      :safe-inset="50"
+      :hollow-ratio="0.3"
+    />
     <!-- 标题放进内容列一起 mx-auto 居中，保证标题与正文左边缘对齐（参考首页布局） -->
     <!-- 不加内边距：PageWrapper 已有 px-4 py-10 md:px-6，避免双重缩进 -->
     <div class="mx-auto max-w-5xl">
@@ -264,14 +279,7 @@ onMounted(load);
         <div class="mt-4 space-y-3">
           <div>
             <label class="text-xs text-sketch-lineSub">类型</label>
-            <select
-              v-model="createDraft.memoryType"
-              class="sketch-input mt-2 w-full bg-transparent"
-            >
-              <option v-for="(label, key) in MEMORY_TYPE_LABEL" :key="key" :value="key">
-                {{ label }}
-              </option>
-            </select>
+            <SketchSelect v-model="createDraft.memoryType" :options="typeOptions" class="mt-2 w-full" />
           </div>
           <div>
             <label class="text-xs text-sketch-lineSub">洞察内容</label>
@@ -314,14 +322,7 @@ onMounted(load);
               <div class="space-y-3">
                 <div>
                   <label class="text-xs text-sketch-lineSub">类型</label>
-                  <select
-                    v-model="editDraft.memoryType"
-                    class="sketch-input mt-2 w-full bg-transparent"
-                  >
-                    <option v-for="(label, key) in MEMORY_TYPE_LABEL" :key="key" :value="key">
-                      {{ label }}
-                    </option>
-                  </select>
+                  <SketchSelect v-model="editDraft.memoryType" :options="typeOptions" class="mt-2 w-full" />
                 </div>
                 <div>
                   <label class="text-xs text-sketch-lineSub">洞察内容</label>
