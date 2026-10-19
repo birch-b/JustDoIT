@@ -10,10 +10,13 @@ import SketchClock from "@/components/sketch/SketchClock.vue";
 import SketchBorder from "@/components/sketch/SketchBorder.vue";
 import SketchCheckbox from "@/components/sketch/SketchCheckbox.vue";
 import SketchCaret from "@/components/sketch/SketchCaret.vue";
+import { useHoverPinDrawer, useHoverPinDrawerGroup } from "@/composables/useHoverPinDrawer";
+import SketchCollapse from "@/components/sketch/SketchCollapse.vue";
 import SketchChip from "@/components/sketch/SketchChip.vue";
 import DualTextBlock from "@/components/sketch/DualTextBlock.vue";
 import DecorDotCluster from "@/components/sketch/DecorDotCluster.vue";
 import SketchConfirmDialog from "@/components/sketch/SketchConfirmDialog.vue";
+import SketchReflectDialog from "@/components/sketch/SketchReflectDialog.vue";
 import SketchNetworkGate from "@/components/sketch/SketchNetworkGate.vue";
 import { useTodoStore } from "@/store/todoStore";
 
@@ -26,10 +29,15 @@ const todoStore = useTodoStore();
 // 是否已登录：首页对访客公开但不展示任何数据
 const isLoggedIn = computed(() => userStore.isLoggedIn);
 
-// 已完成区折叠状态
-const showDone = ref(false);
-// 已完成按分类分组的展开状态（默认全部折叠）
-const doneOpenCats = ref<string[]>([]);
+// 已完成区折叠状态：hover 预览展开 / 点击钉住（composable 统一交互）
+const {
+  expanded: showDone,
+  onEnter: onDoneSectionEnter,
+  onLeave: onDoneSectionLeave,
+  toggle: toggleDoneSection,
+} = useHoverPinDrawer();
+// 已完成按分类分组的抽屉状态（默认全部折叠）
+const doneDrawers = useHoverPinDrawerGroup();
 // 待移出计划表的 todo（确认弹窗）
 const todoToRemove = ref<{ id: number; taskContent: string } | null>(null);
 // 归档确认弹窗
@@ -74,7 +82,7 @@ const cards = computed(() => store.cardList);
 // 历史会话按分类分组成"抽屉"：每组可折叠，像文件夹收纳文件
 // 固定分类顺序，只渲染有会话的组；默认展开最新会话所在的组
 const CATEGORY_ORDER = ["work", "study", "life", "shopping", "health", "social", "other"];
-const openCats = ref<string[]>([]);
+const historyDrawers = useHoverPinDrawerGroup();
 const groupedCards = computed(() => {
   const map = new Map<string, typeof cards.value>();
   for (const c of cards.value) {
@@ -88,12 +96,7 @@ const groupedCards = computed(() => {
     list: map.get(k)!,
   }));
 });
-function toggleCat(key: string) {
-  openCats.value = openCats.value.includes(key)
-    ? openCats.value.filter((k) => k !== key)
-    : [...openCats.value, key];
-}
-// 刷新/进入页面时所有抽屉默认折叠（openCats 初始为空），用户点击组头才展开
+// 刷新/进入页面时所有抽屉默认折叠（钉住集合初始为空）：hover 仅预览，点击才固定展开
 
 // 已完成待办按分类分组
 const groupedDoneList = computed(() => {
@@ -109,15 +112,62 @@ const groupedDoneList = computed(() => {
     list: map.get(k)!,
   }));
 });
-function toggleDoneCat(key: string) {
-  doneOpenCats.value = doneOpenCats.value.includes(key)
-    ? doneOpenCats.value.filter((k) => k !== key)
-    : [...doneOpenCats.value, key];
-}
 
 function askRemoveTodo(todo: { id: number; taskContent: string }) {
   todoToRemove.value = todo;
 }
+
+// 完成打卡：勾选完成时先弹感受收集卡（可跳过），Agent 回应后更新待办
+const reflectTodo = ref<{ id: number; taskContent: string } | null>(null);
+const reflecting = ref(false);
+const reflectError = ref("");
+function askReflect(todo: { id: number; taskContent: string }) {
+  reflectTodo.value = todo;
+  reflectError.value = "";
+}
+async function doReflect(comment: string) {
+  if (!reflectTodo.value || reflecting.value) return;
+  reflecting.value = true;
+  reflectError.value = "";
+  try {
+    await todoStore.reflectDone(reflectTodo.value.id, comment);
+    reflectTodo.value = null;
+  } catch (e) {
+    reflectError.value = (e as Error).message || "打卡失败，请重试";
+  } finally {
+    reflecting.value = false;
+  }
+}
+
+// 到点询问「做了吗」：取最早到期的一条，在首页顶部弹卡；「做了」走打卡弹窗，「还没」顺延
+const dueTodo = computed(() => {
+  if (!isLoggedIn.value) return null;
+  const now = Date.now();
+  return (
+    todoStore.pendingList
+      .filter((t) => t.checkinDueAt && new Date(t.checkinDueAt).getTime() <= now)
+      .sort(
+        (a, b) =>
+          new Date(a.checkinDueAt!).getTime() - new Date(b.checkinDueAt!).getTime()
+      )[0] ?? null
+  );
+});
+const snoozing = ref(false);
+function answerCheckinDone() {
+  if (dueTodo.value) askReflect(dueTodo.value);
+}
+async function snoozeCheckin() {
+  if (!dueTodo.value || snoozing.value) return;
+  snoozing.value = true;
+  try {
+    await todoStore.postponeCheckin(dueTodo.value.id);
+  } catch {
+    // 静默：顺延失败下次进首页还会再问
+  } finally {
+    snoozing.value = false;
+  }
+}
+
 function confirmRemoveTodo() {
   if (!todoToRemove.value) return;
   todoStore.removeTodo(todoToRemove.value.id);
@@ -250,6 +300,26 @@ function goLogin() {
       :hollow-ratio="0.3"
     />
 
+    <!-- 到点询问：做了吗？（做了 → 打卡弹窗；还没 → 顺延） -->
+    <div v-if="dueTodo" class="mb-10">
+      <SketchBorder padding="1.25rem 1.75rem">
+        <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <DualTextBlock cn="到点问问：做了吗？" en="CHECK-IN TIME" size="sm" weight="normal" />
+          <p class="min-w-[12rem] flex-1 text-sm font-light leading-snug">
+            {{ dueTodo.taskContent }}
+          </p>
+          <div class="flex shrink-0 gap-3">
+            <LinearButton size="sm" @click="answerCheckinDone">
+              <span>做了</span>
+            </LinearButton>
+            <LinearButton size="sm" :disabled="snoozing" @click="snoozeCheckin">
+              <span>{{ snoozing ? "…" : "还没" }}</span>
+            </LinearButton>
+          </div>
+        </div>
+      </SketchBorder>
+    </div>
+
     <!-- 顶部：装饰时钟 + 主行动按钮 -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12 md:mb-16">
       <div class="flex justify-center md:justify-start order-2 md:order-1">
@@ -306,12 +376,12 @@ function goLogin() {
             class="h-full"
           >
             <div class="flex items-start gap-3">
-              <!-- 勾选框：点击标记完成 -->
+              <!-- 勾选框：点击先弹完成打卡（感受可选，Agent 回应） -->
               <SketchCheckbox
                 :size="20"
                 :model-value="false"
                 class="mt-0.5 shrink-0"
-                @update:model-value="todoStore.toggleDone(todo.id)"
+                @update:model-value="askReflect(todo)"
               />
               <!-- 内容 -->
               <div class="flex-1 min-w-0">
@@ -340,11 +410,12 @@ function goLogin() {
         </div>
 
         <!-- 已完成折叠区（按分类分组成抽屉） -->
-        <div v-if="todoStore.doneList.length" class="mt-6">
+        <div v-if="todoStore.doneList.length" class="mt-6" @mouseleave="onDoneSectionLeave">
           <div class="flex items-center justify-between">
             <button
               class="flex items-center gap-2 text-xs text-sketch-lineSub hover:text-sketch-line"
-              @click="showDone = !showDone"
+              @click="toggleDoneSection"
+              @mouseenter="onDoneSectionEnter"
             >
               <span class="inline-flex items-center text-sketch-lineSub transition-transform duration-300" :style="{ transform: showDone ? 'rotate(90deg)' : 'rotate(0deg)' }"><SketchCaret :size="10" /></span>
               <span>已完成 {{ todoStore.doneList.length }} 项</span>
@@ -357,19 +428,21 @@ function goLogin() {
             </button>
           </div>
 
-          <div v-show="showDone" class="mt-4 space-y-4">
-            <div v-for="g in groupedDoneList" :key="g.key">
+          <SketchCollapse :open="showDone">
+          <div class="mt-4 space-y-4">
+            <div v-for="g in groupedDoneList" :key="g.key" @mouseleave="doneDrawers.onLeave(g.key)">
               <!-- 分类抽屉头 -->
               <button
                 type="button"
                 class="flex w-full items-center justify-between pb-1 text-left"
-                :aria-expanded="doneOpenCats.includes(g.key)"
-                @click="toggleDoneCat(g.key)"
+                :aria-expanded="doneDrawers.isOpen(g.key)"
+                @click="doneDrawers.toggle(g.key)"
+                @mouseenter="doneDrawers.onEnter(g.key)"
               >
                 <span class="flex items-center gap-2">
                   <span
                     class="inline-flex items-center text-sketch-lineSub transition-transform duration-300"
-                    :style="{ transform: doneOpenCats.includes(g.key) ? 'rotate(90deg)' : 'rotate(0deg)' }"
+                    :style="{ transform: doneDrawers.isOpen(g.key) ? 'rotate(90deg)' : 'rotate(0deg)' }"
                   ><SketchCaret :size="10" /></span>
                   <span class="text-xs font-light text-sketch-lineSub">{{ g.label }}</span>
                 </span>
@@ -377,22 +450,37 @@ function goLogin() {
               </button>
 
               <!-- 该分类下的已完成待办 -->
-              <div v-show="doneOpenCats.includes(g.key)" class="mt-2 space-y-2">
+              <SketchCollapse :open="doneDrawers.isOpen(g.key)">
+              <div class="mt-2 space-y-2">
                 <div
                   v-for="todo in g.list"
                   :key="todo.id"
-                  class="flex items-center gap-3 px-3 py-2 opacity-60"
+                  class="flex items-start gap-3 px-3 py-2 opacity-60"
                 >
                   <SketchCheckbox
                     :size="18"
                     :model-value="true"
-                    class="shrink-0"
+                    class="shrink-0 mt-0.5"
                     @update:model-value="todoStore.toggleDone(todo.id)"
                   />
-                  <p class="flex-1 min-w-0 text-sm font-light line-through truncate">
-                    {{ todo.taskContent }}
-                  </p>
-                  <SketchChip tag>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-light line-through truncate">
+                      {{ todo.taskContent }}
+                    </p>
+                    <!-- 打卡感受与 Agent 回应：浅灰小字 -->
+                    <div
+                      v-if="todo.reflectionComment || todo.reflectionReply"
+                      class="mt-1 space-y-0.5"
+                    >
+                      <p v-if="todo.reflectionComment" class="text-xs font-light text-sketch-lineSub">
+                        我：{{ todo.reflectionComment }}
+                      </p>
+                      <p v-if="todo.reflectionReply" class="text-xs font-light text-sketch-lineSub">
+                        Agent：{{ todo.reflectionReply }}
+                      </p>
+                    </div>
+                  </div>
+                  <SketchChip tag class="shrink-0">
                     {{ categoryLabel[todo.category] || todo.category }}
                   </SketchChip>
                   <button
@@ -404,8 +492,10 @@ function goLogin() {
                   </button>
                 </div>
               </div>
+              </SketchCollapse>
             </div>
           </div>
+          </SketchCollapse>
         </div>
 
       </template>
@@ -490,18 +580,19 @@ function goLogin() {
 
       <!-- 分类抽屉：每组可折叠，默认展开最新会话所在分类 -->
       <div v-else class="space-y-6">
-        <div v-for="g in groupedCards" :key="g.key">
+        <div v-for="g in groupedCards" :key="g.key" @mouseleave="historyDrawers.onLeave(g.key)">
           <!-- 抽屉头：分类名 + 数量 + 折叠箭头 -->
           <button
             type="button"
             class="flex w-full items-center justify-between pb-2 sketch-border-b text-left"
-            :aria-expanded="openCats.includes(g.key)"
-            @click="toggleCat(g.key)"
+            :aria-expanded="historyDrawers.isOpen(g.key)"
+            @click="historyDrawers.toggle(g.key)"
+            @mouseenter="historyDrawers.onEnter(g.key)"
           >
             <span class="flex items-center gap-2">
               <span
                 class="inline-flex items-center text-sketch-lineSub transition-transform duration-300"
-                :style="{ transform: openCats.includes(g.key) ? 'rotate(90deg)' : 'rotate(0deg)' }"
+                :style="{ transform: historyDrawers.isOpen(g.key) ? 'rotate(90deg)' : 'rotate(0deg)' }"
               ><SketchCaret :size="12" /></span>
               <span class="text-sm font-light">{{ g.label }}</span>
             </span>
@@ -511,8 +602,8 @@ function goLogin() {
           </button>
 
           <!-- 抽屉内容：该分类下的卡片网格 -->
+          <SketchCollapse :open="historyDrawers.isOpen(g.key)">
           <div
-            v-show="openCats.includes(g.key)"
             class="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
           >
             <component
@@ -570,6 +661,7 @@ function goLogin() {
           </SketchBorder>
             </component>
           </div>
+          </SketchCollapse>
         </div>
       </div>
     </section>
@@ -606,6 +698,16 @@ function goLogin() {
       confirm-text="归档"
       @confirm="confirmArchiveDone"
       @cancel="showArchiveConfirm = false"
+    />
+
+    <!-- 完成打卡：感受可选，Agent 回应 -->
+    <SketchReflectDialog
+      :open="!!reflectTodo"
+      :task-content="reflectTodo?.taskContent ?? ''"
+      :loading="reflecting"
+      :error="reflectError"
+      @submit="doReflect"
+      @cancel="reflectTodo = null"
     />
 
     <!-- 登录后首次加载 / 网络异常全屏门屏（组件内部 Teleport 到 body） -->

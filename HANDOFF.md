@@ -4,7 +4,7 @@
 
 决策辅助应用：帮纠结的用户做「做不做」的决定。Vue3 前端 + NestJS 后端（DeepSeek LLM 生成行动建议 + 答案之书/塔罗牌/天气等神秘加成）。
 
-**站名已定：中文「拍板大王」+ 英文「JUST DO IT」**（NavBar 副标题 + Dashboard 首页标题均为 拍板大王 / JUST DO IT，中英排列遵循全站「中文主 + 英文副」模式）。
+
 
 ## 0. 工程结构
 
@@ -20,24 +20,24 @@
 
 **前后端主链路全部打通，无 mock 依赖（神秘加成公开接口失败时有本地兜底）。**
 
-| 模块 | 状态 |
-|---|---|
-| 用户注册/登录（JWT，用户名或邮箱均可） | ✅ 真实接口 |
-| 邮箱验证码（注册/找回密码/注销，QQ 邮箱 SMTP） | ✅ **已迁移 Redis**（TTL 5min，2026-10-06，commit `6275d12`） |
-| 用户资料更新（username/email/bio） | ✅ `PATCH /user/profile` |
-| Agent 会话创建/列表/详情/历史/反馈/删除 | ✅ 真实接口 |
-| 统计聚合 | ✅ `GET /agent/stats`，SQL 层聚合 |
-| 计划表待办 CRUD + 归档 + 「接受→执行」回写 | ✅ 真实接口 |
-| 答案之书 / 塔罗牌（含 LLM 同向解读） | ✅ 第三方接口，失败本地兜底 |
-| 今日天气（省市联动/📍定位 → 天气 + 打分 → 注入 prompt） | ✅ whyta.cn + mxnzp + 百度地图 |
-| 消费购物钱包评估（价格/余额/宽裕度 → prompt） | ✅ 仅 shopping 分类 |
-| **地点搜索**（百度 POI 联想 + 定位三级兜底） | ✅ 2026-10-07 新增，见 §2.6 |
-| 记忆综合论述（统计页 LLM 整体画像） | ✅ `/memory/summary`，30min 缓存 |
-| 关键词汇总页（记忆 CRUD） | ✅ `/keywords` |
-| 历史会话/已完成待办/归档记录分类折叠抽屉 | ✅ 默认全折叠 |
-| DeepSeek LLM 建议 | ✅ 失败自动降级规则引擎 |
-| 用户长期记忆 Memory | ✅ 表 + CRUD + Prompt 注入 + 规则更新(3.4) + LLM 提炼(3.5) |
-| 部署安全加固 | ✅ 字段级加密 + CORS 白名单 + 本地服务绑 127.0.0.1（2026-10-06） |
+| 模块                                    | 状态                                                    |
+| ------------------------------------- | ----------------------------------------------------- |
+| 用户注册/登录（JWT，用户名或邮箱均可）                 | ✅ 真实接口                                                |
+| 邮箱验证码（注册/找回密码/注销，QQ 邮箱 SMTP）          | ✅ **已迁移 Redis**（TTL 5min，2026-10-06，commit `6275d12`） |
+| 用户资料更新（username/email/bio）            | ✅ `PATCH /user/profile`                               |
+| Agent 会话创建/列表/详情/历史/反馈/删除             | ✅ 真实接口                                                |
+| 统计聚合                                  | ✅ `GET /agent/stats`，SQL 层聚合                          |
+| 计划表待办 CRUD + 归档 + 「接受→执行」回写           | ✅ 真实接口                                                |
+| 答案之书 / 塔罗牌（含 LLM 同向解读）                | ✅ 第三方接口，失败本地兜底                                        |
+| 今日天气（省市联动/📍定位 → 天气 + 打分 → 注入 prompt） | ✅ whyta.cn + mxnzp + 百度地图                             |
+| 消费购物钱包评估（价格/余额/宽裕度 → prompt）          | ✅ 仅 shopping 分类                                       |
+| **地点搜索**（百度 POI 联想 + 定位三级兜底）          | ✅ 2026-10-07 新增，见 §2.6                                |
+| 记忆综合论述（统计页 LLM 整体画像）                  | ✅ `/memory/summary`，30min 缓存                          |
+| 关键词汇总页（记忆 CRUD）                       | ✅ `/keywords`                                         |
+| 历史会话/已完成待办/归档记录分类折叠抽屉                 | ✅ 默认全折叠                                               |
+| DeepSeek LLM 建议                       | ✅ 失败自动降级规则引擎                                          |
+| 用户长期记忆 Memory                         | ✅ 表 + CRUD + Prompt 注入 + 规则更新(3.4) + LLM 提炼(3.5)      |
+| 部署安全加固                                | ✅ 字段级加密 + CORS 白名单 + 本地服务绑 127.0.0.1（2026-10-06）      |
 
 ⚠️ 后端在 `action-agent-nest` 目录执行 `npm run start:dev`（端口 3000）。改 `.env` 必须手动重启（watch 只监听 .ts）。
 
@@ -47,20 +47,20 @@
 
 ### 2.1 后端 Agent 模块（`src/agent/`，除公开接口外均需 JWT）
 
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| POST | `/agent/session/create` | 创建会话：存任务 → LLM/规则算建议 → 神秘加成 → 存会话 |
-| GET | `/agent/sessions` | 历史列表（SQL 层 userId 过滤） |
-| GET | `/agent/stats` | 统计聚合（totalSessions/executedCount/acceptRate/modeDistribution/willVsComplete） |
-| GET | `/agent/session/:id` | 会话详情（校验归属） |
-| GET | `/agent/history/:id` | 历史详情（会话+任务+反馈） |
-| POST | `/agent/action/record` | 行为反馈 upsert；`withReply:true` 时二次调 LLM 生成 Agent 回应 |
-| DELETE | `/agent/session/:id` | 删除会话：级联删 待办→反馈→会话→任务 |
-| GET | `/agent/answer-book` | 公开，答案之书（uapis.cn） |
-| POST | `/agent/tarot` | 公开，塔罗抽 1 张（妖狐 API + 本地兜底牌面） |
-| GET | `/agent/weather?city=武汉` | 公开，今日天气（whyta.cn），失败 data:null |
-| GET | `/agent/cities` | 公开，全国省/市两级联动（mxnzp，31省341市，内存缓存 24h） |
-| GET | `/agent/place-search?keyword=&lat=&lng=&city=` | 公开，地点搜索（百度 suggestion），见 §2.6 |
+| 方法     | 路径                                             | 说明                                                                           |
+| ------ | ---------------------------------------------- | ---------------------------------------------------------------------------- |
+| POST   | `/agent/session/create`                        | 创建会话：存任务 → LLM/规则算建议 → 神秘加成 → 存会话                                            |
+| GET    | `/agent/sessions`                              | 历史列表（SQL 层 userId 过滤）                                                        |
+| GET    | `/agent/stats`                                 | 统计聚合（totalSessions/executedCount/acceptRate/modeDistribution/willVsComplete） |
+| GET    | `/agent/session/:id`                           | 会话详情（校验归属）                                                                   |
+| GET    | `/agent/history/:id`                           | 历史详情（会话+任务+反馈）                                                               |
+| POST   | `/agent/action/record`                         | 行为反馈 upsert；`withReply:true` 时二次调 LLM 生成 Agent 回应                            |
+| DELETE | `/agent/session/:id`                           | 删除会话：级联删 待办→反馈→会话→任务                                                         |
+| GET    | `/agent/answer-book`                           | 公开，答案之书（uapis.cn）                                                            |
+| POST   | `/agent/tarot`                                 | 公开，塔罗抽 1 张（妖狐 API + 本地兜底牌面）                                                  |
+| GET    | `/agent/weather?city=武汉`                       | 公开，今日天气（whyta.cn），失败 data:null                                               |
+| GET    | `/agent/cities`                                | 公开，全国省/市两级联动（mxnzp，31省341市，内存缓存 24h）                                         |
+| GET    | `/agent/place-search?keyword=&lat=&lng=&city=` | 公开，地点搜索（百度 suggestion），见 §2.6                                                |
 
 ### 2.2 LLM 建议链路（DeepSeek，2026-09-18 接入）
 
@@ -82,11 +82,11 @@
 
 ### 2.4 Memory 模块（`src/memory/`，需 JWT + 归属校验）
 
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/memory` | 全部记忆（updatedAt 倒序） |
-| GET | `/memory/summary` | LLM 综合论述（2-3 句整体画像，30min 内容哈希缓存） |
-| POST/PATCH/DELETE | `/memory[/:id]` | 手动增改删 |
+| 方法                | 路径                | 说明                               |
+| ----------------- | ----------------- | -------------------------------- |
+| GET               | `/memory`         | 全部记忆（updatedAt 倒序）               |
+| GET               | `/memory/summary` | LLM 综合论述（2-3 句整体画像，30min 内容哈希缓存） |
+| POST/PATCH/DELETE | `/memory[/:id]`   | 手动增改删                            |
 
 - **表**：`user_memory`（memory_type / content / confidence 0~1 / memory_key 可空=LLM upsert 键 / keyword varchar(10) 可空=3-5字汉字标签）
 - **3.4 规则引擎**（`behavior-memory.service.ts`）：反馈后 `syncFromFeedback(userId, category)` 重算该类别 → 增/改/翻转/回收受管模板记忆（关键词带类别前缀防碰撞，如「工作听劝」）。阈值：**每类样本 ≥5 且 ≥4/5 同向（或 ≤1/5）才生成**；样本不足 5 的类别旧关键词自动回收。方案 A 放弃判定：有 deadline 按 deadline+2天、否则反馈后 7 天，窗口内不进执行率分母
@@ -181,12 +181,12 @@
 
 ## 四、卡住的问题 / 已知限制
 
-| 问题 | 状态 | 说明 |
-|---|---|---|
-| ~~验证码内存存储~~ | **已解决** | 2026-10-06 迁 Redis，启动探活失败即拒启动 |
-| ts-jest 单测全挂 | 已知限制 | 项目级 rootDir 配置问题，与业务代码无关 |
-| 浏览器定位成功率低 | 已兜底 | 地点搜索三级兜底（坐标→天气城市→全国），见 §2.6 |
-| 服务器部署加固 | 待做 | HTTPS、防火墙只开 22/80/443、关闭 synchronize |
+| 问题           | 状态      | 说明                                   |
+| ------------ | ------- | ------------------------------------ |
+| ~~验证码内存存储~~  | **已解决** | 2026-10-06 迁 Redis，启动探活失败即拒启动        |
+| ts-jest 单测全挂 | 已知限制    | 项目级 rootDir 配置问题，与业务代码无关             |
+| 浏览器定位成功率低    | 已兜底     | 地点搜索三级兜底（坐标→天气城市→全国），见 §2.6          |
+| 服务器部署加固      | 待做      | HTTPS、防火墙只开 22/80/443、关闭 synchronize |
 
 ---
 
@@ -266,9 +266,6 @@ irm "http://localhost:3000/api/agent/stats" -Headers $h
 irm "http://localhost:3000/api/memory" -Headers $h
 irm "http://localhost:3000/api/todos/archived" -Headers $h
 irm "http://localhost:3000/api/todos/1/archive" -Method Patch -Headers $h
-
-# E2E 测试账号（密码均 Test123456）：e2e_m35 / e2e_m35b / e2e_m35c
-# Birch 密码为 birch1（用户要求固定，不要重置）
 
 # Git（前后端同一仓库，根目录操作）
 git status

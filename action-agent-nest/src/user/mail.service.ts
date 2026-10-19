@@ -53,4 +53,32 @@ export class MailService {
       `,
     });
   }
+
+  /** 发送「做了吗」提醒邮件：提醒用户回站点打卡 */
+  async sendCheckinMail(email: string, username: string, taskContent: string) {
+    if (!this.transporter) {
+      throw new ServiceUnavailableException(
+        '邮件服务未配置，请在后端 .env 填写 QQ_MAIL_USER 和 QQ_MAIL_AUTH_CODE',
+      );
+    }
+    const siteUrl = process.env.APP_URL || 'http://localhost:5174';
+    const esc = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const greet = username ? `${esc(username)}，` : '';
+    await this.transporter.sendMail({
+      from: `"JustDoIT" <${this.fromUser}>`,
+      to: email,
+      subject: `【JustDoIT】做了吗？——你的计划表在等你`,
+      html: `
+        <div style="max-width:480px;margin:0 auto;padding:32px;font-family:Arial,sans-serif;">
+          <h2 style="font-weight:normal;">${greet}之前拍板的事，做了吗？</h2>
+          <p style="color:#555;">「${esc(taskContent)}」</p>
+          <p style="margin:24px 0;">
+            <a href="${siteUrl}" style="background:#7FA89F;color:#fff;padding:10px 24px;text-decoration:none;border-radius:4px;">去计划表看看</a>
+          </p>
+          <p style="color:#999;font-size:12px;">已经做完的话，忽略本邮件即可；到站点打卡还能收到 Agent 的回应。若非本人操作，请忽略此邮件。</p>
+        </div>
+      `,
+    });
+  }
 }

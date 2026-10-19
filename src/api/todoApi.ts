@@ -41,6 +41,21 @@ export const todoApi = {
     });
   },
 
+  /** POST /todos/:id/reflect：完成打卡（可选感受，Agent 生成回应） */
+  reflect(id: number, comment: string): Promise<TodoItem> {
+    return authRequest<TodoItem>(`${BASE_URL}/${id}/reflect`, {
+      method: "POST",
+      body: JSON.stringify({ comment }),
+    });
+  },
+
+  /** POST /todos/:id/postpone：答了「还没」/忽略询问，顺延到下一个询问点 */
+  postpone(id: number): Promise<TodoItem> {
+    return authRequest<TodoItem>(`${BASE_URL}/${id}/postpone`, {
+      method: "POST",
+    });
+  },
+
   /** PATCH /todos/:id/archive：归档单条 */
   archive(id: number): Promise<TodoItem> {
     return authRequest<TodoItem>(`${BASE_URL}/${id}/archive`, {

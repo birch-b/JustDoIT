@@ -371,8 +371,17 @@ onMounted(load);
                       {{ m.keyword }}
                     </span>
                   </div>
-                  <p class="mt-3 text-sm font-light leading-relaxed text-sketch-line break-words pl-2">
+                  <p
+                    v-if="m.content?.trim()"
+                    class="mt-3 text-sm font-light leading-relaxed text-sketch-line break-words pl-2"
+                  >
                     {{ m.content }}
+                  </p>
+                  <p
+                    v-else
+                    class="mt-3 text-xs font-light text-sketch-lineSub break-words pl-2"
+                  >
+                    （暂无描述，点击「编辑」可补充）
                   </p>
                 </div>
                 <div class="flex shrink-0 items-center gap-2 pr-2">

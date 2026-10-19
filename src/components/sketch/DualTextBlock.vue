@@ -31,7 +31,7 @@ withDefaults(defineProps<Props>(), {
     </p>
     <p
       v-if="en"
-      class="mt-1 text-xs font-light text-sketch-lineSub font-en tracking-wide"
+      class="mt-1 text-xs font-light text-sketch-lineSub font-en tracking-wide break-words"
     >
       {{ en }}
     </p>

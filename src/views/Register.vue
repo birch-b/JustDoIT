@@ -11,6 +11,7 @@ import DualTextBlock from "@/components/sketch/DualTextBlock.vue";
 import SketchCheckbox from "@/components/sketch/SketchCheckbox.vue";
 import DecorDotCluster from "@/components/sketch/DecorDotCluster.vue";
 import EmailCodeInput from "@/components/sketch/EmailCodeInput.vue";
+import { openGuide } from "@/components/onboarding/OnboardingGuide.vue";
 
 const router = useRouter();
 const route = useRoute();
@@ -86,6 +87,8 @@ async function submit() {
     errorMsg.value = res.msg;
     return;
   }
+  // 仅在注册成功这一刻弹新手引导：老用户与日常进入不再被打扰，忘记用法点导航栏「?」重看
+  openGuide();
   router.push(redirect.value);
 }
 </script>

@@ -189,6 +189,40 @@ export const useTodoStore = defineStore("todo", {
       }
     },
 
+    /** 完成打卡：标记完成 + 可选感受 + Agent 回应（替代直接勾完成） */
+    async reflectDone(id: number, comment: string): Promise<void> {
+      const item = this.list.find((t) => t.id === id);
+      const updated = await todoApi.reflect(id, comment);
+      if (item) Object.assign(item, updated);
+
+      // 带 sessionId 的待办：同步后端 ActionRecord.isExecute（与 toggleDone 一致）
+      if (updated.sessionId) {
+        try {
+          const agentStore = useAgentStore();
+          const cached = agentStore.getSessionWithTask(updated.sessionId);
+          const existingRecord = cached?.record;
+          const req: ActionRecordReq = {
+            sessionId: updated.sessionId,
+            userAcceptSuggest: existingRecord?.userAcceptSuggest ?? true,
+            isExecute: true,
+            actualCostMin: existingRecord?.actualCostMin ?? 0,
+            executeResult: existingRecord?.executeResult ?? "",
+          };
+          const record = await agentApi.submitActionRecord(req);
+          if (cached) cached.record = record;
+        } catch {
+          // 反馈同步失败不影响打卡本身
+        }
+      }
+    },
+
+    /** 答了「还没」/忽略询问：顺延到下一个询问点 */
+    async postponeCheckin(id: number): Promise<void> {
+      const item = this.list.find((t) => t.id === id);
+      const updated = await todoApi.postpone(id);
+      if (item) Object.assign(item, updated);
+    },
+
     /** 移出计划表：物理删除 todo，关联 session 不受影响 */
     async removeTodo(id: number): Promise<void> {
       const prev = this.list;

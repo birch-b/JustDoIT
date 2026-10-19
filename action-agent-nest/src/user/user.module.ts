@@ -28,5 +28,7 @@ import { VerifyCodeService } from './verify-code.service';
   ],
   controllers: [UserController],
   providers: [UserService, MailService, VerifyCodeService],
+  // MailService 导出给 AgentModule：待办「做了吗」定时邮件提醒复用发信能力
+  exports: [MailService],
 })
 export class UserModule {}

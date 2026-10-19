@@ -15,6 +15,7 @@ import SketchSelect from "@/components/sketch/SketchSelect.vue";
 import SketchDatePicker from "@/components/sketch/SketchDatePicker.vue";
 import SketchPlacePicker from "@/components/sketch/SketchPlacePicker.vue";
 import DualTextBlock from "@/components/sketch/DualTextBlock.vue";
+import SketchTooltip from "@/components/sketch/SketchTooltip.vue";
 import SketchThinkingDots from "@/components/sketch/SketchThinkingDots.vue";
 
 const router = useRouter();
@@ -335,9 +336,12 @@ function reset() {
         <!-- 响应式内边距：手机 1.5rem / 平板 3rem / 桌面 5rem，避免窄屏内容被压挤 -->
         <SketchBorder class="p-6 md:p-12 lg:p-20">
           <form class="space-y-8" @submit.prevent="submit">
-            <!-- 任务内容 -->
+            <!-- 纠结内容 -->
             <div>
-              <DualTextBlock cn="任务内容" en="TASK CONTENT" size="sm" weight="normal" />
+              <div class="flex items-center gap-2 min-w-0">
+                <DualTextBlock class="min-w-0" cn="纠结内容" en="TASK CONTENT" size="sm" weight="normal" />
+                <SketchTooltip text="用一句话说清你在纠结什么，越具体建议越准" />
+              </div>
               <textarea
                 v-model="form.taskContent"
                 class="sketch-input mt-2 w-full resize-none"
@@ -542,12 +546,16 @@ function reset() {
 
             <!-- 补充条件（可选）：一句话描述不全时补充背景或约束，留空即为无补充 -->
             <div>
-              <DualTextBlock cn="补充条件（可选）" en="EXTRA CONTEXT (OPTIONAL)" size="sm" weight="normal" />
+              <div class="flex items-center gap-2 min-w-0">
+                <DualTextBlock class="min-w-0" cn="前提条件（可选）" en="EXTRA CONTEXT (OPTIONAL)" size="sm" weight="normal" />
+                <SketchTooltip text="补充一些解决事情的原因，可以让结果更符合你的预期" />
+              </div>
               <textarea
                 v-model="form.extraContext"
                 class="sketch-input mt-2 w-full resize-none"
                 rows="2"
                 maxlength="500"
+             
               />
             </div>
 

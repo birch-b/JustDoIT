@@ -2,7 +2,7 @@
 // 个人统计页 /stats
 // 图表沿用 lieflat-charts 视觉语法（tick rows / tick gauge / 单位点阵），
 // 手绘 SVG + 品牌 custom 色板：奶米底、深棕墨线、薄荷灰绿为唯一 HERO 色
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAgentStore } from "@/store/agentStore";
 import { useTodoStore } from "@/store/todoStore";
@@ -14,6 +14,8 @@ import SketchBorder from "@/components/sketch/SketchBorder.vue";
 import DualTextBlock from "@/components/sketch/DualTextBlock.vue";
 import SketchCheckbox from "@/components/sketch/SketchCheckbox.vue";
 import SketchCaret from "@/components/sketch/SketchCaret.vue";
+import { useHoverPinDrawer, useHoverPinDrawerGroup } from "@/composables/useHoverPinDrawer";
+import SketchCollapse from "@/components/sketch/SketchCollapse.vue";
 import SketchChip from "@/components/sketch/SketchChip.vue";
 import SketchConfirmDialog from "@/components/sketch/SketchConfirmDialog.vue";
 import DecorDotCluster from "@/components/sketch/DecorDotCluster.vue";
@@ -63,12 +65,37 @@ onMounted(() => {
   store.loadStats();
   // 归档记录条数要显示在抽屉头上，挂载时即拉取
   if (userStore.isLoggedIn) todoStore.loadArchived();
+
+  // 图 3 懒加载：完整露出视口（≥98% 可见，留余量防边缘 1px 裁剪导致永不触发）才首次播放；
+  // observer 保持常驻，实时跟踪「此刻是否完整可见」，作为悬停重放的开关
+  willIo = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        const full = entry.isIntersecting && entry.intersectionRatio >= 0.98;
+        willFullyVisible.value = full;
+        if (full && !willSeen.value) willSeen.value = true;
+      }
+    },
+    { threshold: 0.98 },
+  );
+  if (willChartEl.value) willIo.observe(willChartEl.value);
+});
+
+onBeforeUnmount(() => {
+  willIo?.disconnect();
+  willIo = null;
 });
 
 const stats = computed(() => store.stats);
 
 // ── 归档记录抽屉：首页「归档已完成」清掉的待办在这里查看 ──────────
-const showArchived = ref(false);
+// hover 预览展开 / 点击钉住（composable 统一交互）
+const {
+  expanded: showArchived,
+  onEnter: onArchivedEnter,
+  onLeave: onArchivedLeave,
+  toggle: toggleArchived,
+} = useHoverPinDrawer();
 const isLoggedIn = computed(() => userStore.isLoggedIn);
 
 // 删除归档记录（确认弹窗）
@@ -103,11 +130,13 @@ const archivedGroups = computed(() => {
     .map((k) => ({ category: k, items: groups[k] }));
 });
 
-// 每个分类抽屉独立折叠状态
-const archivedFoldMap = ref<Record<string, boolean>>({});
-function toggleArchivedFold(cat: string) {
-  archivedFoldMap.value[cat] = !archivedFoldMap.value[cat];
-}
+// 每个分类抽屉独立折叠状态（hover 预览 / 点击钉住）
+const {
+  isOpen: isArchivedOpen,
+  onEnter: onArchivedCatEnter,
+  onLeave: onArchivedCatLeave,
+  toggle: toggleArchivedFold,
+} = useHoverPinDrawerGroup();
 
 // ── 图 1：接受率 tick gauge（1 tick = 5%，共 20 tick）────────────
 const gaugeTicks = computed(() =>
@@ -210,6 +239,36 @@ const willChart = computed(() => {
 
   return { cols, dots, yTicks, empty: dots.length === 0 };
 });
+
+// ── 图 3 动画编排：懒加载 + 悬停重放 ────────────────────────────
+// 1) 首次滚动到图表完整露出视口才渲染墨圈并播弹入动画（IntersectionObserver）
+// 2) 此后鼠标移入图表重放一次——但要求此刻图表仍完整在视口内，半截露出时移入无效
+// 3) 短时间（2.5s）内反复移入不刷屏：计数攒到第 4 次移入才再重放
+const willChartEl = ref<HTMLElement | null>(null);
+const willSeen = ref(false); // 是否已完整入镜过（首次播放开关）
+const willFullyVisible = ref(false); // 此刻图表是否完整在视口内（悬停重放的实时前提）
+const willPlayKey = ref(0); // 递增使气泡 <g> 重建，CSS 动画从头重放
+let willIo: IntersectionObserver | null = null;
+let hoverCount = 0;
+let lastPlayAt = 0;
+const HOVER_WINDOW_MS = 2500; // 视为“短时间”的窗口
+const HOVER_THRESHOLD = 4; // 窗口内第几次移入触发重放
+
+function playWillChart() {
+  willPlayKey.value++;
+  hoverCount = 0;
+  lastPlayAt = Date.now();
+}
+
+function onWillEnter() {
+  // 只有图表此刻完整在视口内才允许重放：半截露出时移入不算数
+  if (!willSeen.value || !willFullyVisible.value || willChart.value.empty) return;
+  if (Date.now() - lastPlayAt > HOVER_WINDOW_MS) {
+    playWillChart(); // 距上次播放已出窗口：移入即播
+  } else if (++hoverCount >= HOVER_THRESHOLD) {
+    playWillChart(); // 窗口内密集移入：攒够次数再播，避免甩鼠标疯狂重放
+  }
+}
 
 // 散落装饰：手绘方框（波点由 DecorDotCluster 统一渲染）
 interface BoxDeco {
@@ -351,87 +410,93 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
           </div>
         </div>
 
-        <!-- 空状态 -->
-        <div v-if="willChart.empty" class="flex h-[250px] flex-col items-center justify-center text-center">
-          <SketchCheckbox :size="30" decorative />
-          <p class="mt-3 text-sm font-light text-sketch-lineSub">
-            还没有真实执行反馈，去结果页记录你的行动吧
-          </p>
-        </div>
+        <!-- 图表主体：IO 观测 + 悬停计数的常驻容器（空态时也在，保证 observer 可挂载）；
+             mouseenter 不冒泡，进出图表才算一次移入 -->
+        <div ref="willChartEl" @mouseenter="onWillEnter">
+          <!-- 空状态 -->
+          <div v-if="willChart.empty" class="flex h-[250px] flex-col items-center justify-center text-center">
+            <SketchCheckbox :size="30" decorative />
+            <p class="mt-3 text-sm font-light text-sketch-lineSub">
+              还没有真实执行反馈，去结果页记录你的行动吧
+            </p>
+          </div>
 
-        <svg v-else viewBox="0 0 400 262" class="mt-4 w-full" role="img" aria-label="意愿分数与执行手绘墨点图：横轴意愿1到10，纵轴次数；每个意愿分上实心墨圈高度为已执行次数、空心墨圈高度为未执行次数，次数相同时左右排开">
-          <!-- y 轴：次数（横向导轨 + 左侧数字，对齐每一层圆点） -->
-          <g v-for="t in willChart.yTicks" :key="`y${t.k}`">
+          <svg v-else viewBox="0 0 400 262" class="mt-4 w-full" role="img" aria-label="意愿分数与执行手绘墨点图：横轴意愿1到10，纵轴次数；每个意愿分上实心墨圈高度为已执行次数、空心墨圈高度为未执行次数，次数相同时左右排开">
+            <!-- y 轴：次数（横向导轨 + 左侧数字，对齐每一层圆点） -->
+            <g v-for="t in willChart.yTicks" :key="`y${t.k}`">
+              <line
+                v-if="t.k > 0"
+                :x1="BUB_X0" :y1="t.y" :x2="BUB_X1" :y2="t.y"
+                :stroke="GRID" stroke-width="0.5"
+              />
+              <text
+                :x="BUB_X0 - 9" :y="t.y + 2.5" text-anchor="end"
+                :fill="t.k === 0 ? MUT : FAINT" font-size="7" font-weight="600"
+                font-family="Inter, sans-serif"
+              >{{ t.k }}</text>
+            </g>
+            <!-- y 轴标题 -->
+            <text
+              :x="BUB_X0 - 26" :y="BUB_TOP - 6" text-anchor="middle"
+              :fill="MUT" font-size="7.5" font-weight="600"
+              font-family="'Noto Sans SC', Inter, sans-serif"
+            >次数</text>
+
+            <!-- x 基线 + 列刻度 + 意愿分 1-10 -->
+            <line :x1="BUB_X0" :y1="BUB_BASE" :x2="BUB_X1" :y2="BUB_BASE" :stroke="GRID" stroke-width="0.9" />
             <line
-              v-if="t.k > 0"
-              :x1="BUB_X0" :y1="t.y" :x2="BUB_X1" :y2="t.y"
-              :stroke="GRID" stroke-width="0.5"
+              v-for="c in willChart.cols"
+              :key="`b${c.w}`"
+              :x1="c.cx"
+              :y1="BUB_BASE"
+              :x2="c.cx"
+              :y2="c.long ? BUB_BASE + 9 : BUB_BASE + 5"
+              :stroke="FAINT"
+              stroke-width="0.7"
             />
             <text
-              :x="BUB_X0 - 9" :y="t.y + 2.5" text-anchor="end"
-              :fill="t.k === 0 ? MUT : FAINT" font-size="7" font-weight="600"
+              v-for="c in willChart.cols"
+              :key="`x${c.w}`"
+              :x="c.cx"
+              :y="BUB_BASE + 20"
+              text-anchor="middle"
+              :fill="c.long ? MUT : FAINT"
+              font-size="7.5" font-weight="600"
               font-family="Inter, sans-serif"
-            >{{ t.k }}</text>
-          </g>
-          <!-- y 轴标题 -->
-          <text
-            :x="BUB_X0 - 26" :y="BUB_TOP - 6" text-anchor="middle"
-            :fill="MUT" font-size="7.5" font-weight="600"
-            font-family="'Noto Sans SC', Inter, sans-serif"
-          >次数</text>
+            >{{ c.w }}</text>
+            <text
+              :x="(BUB_X0 + BUB_X1) / 2" :y="BUB_BASE + 34" text-anchor="middle"
+              :fill="MUT" font-size="8" font-weight="600"
+              font-family="'Noto Sans SC', Inter, sans-serif" letter-spacing="0.05em"
+            >意愿分数 · 1 不想做 → 10 很想做</text>
 
-          <!-- x 基线 + 列刻度 + 意愿分 1-10 -->
-          <line :x1="BUB_X0" :y1="BUB_BASE" :x2="BUB_X1" :y2="BUB_BASE" :stroke="GRID" stroke-width="0.9" />
-          <line
-            v-for="c in willChart.cols"
-            :key="`b${c.w}`"
-            :x1="c.cx"
-            :y1="BUB_BASE"
-            :x2="c.cx"
-            :y2="c.long ? BUB_BASE + 9 : BUB_BASE + 5"
-            :stroke="FAINT"
-            stroke-width="0.7"
-          />
-          <text
-            v-for="c in willChart.cols"
-            :key="`x${c.w}`"
-            :x="c.cx"
-            :y="BUB_BASE + 20"
-            text-anchor="middle"
-            :fill="c.long ? MUT : FAINT"
-            font-size="7.5"
-            font-weight="600"
-            font-family="Inter, sans-serif"
-          >{{ c.w }}</text>
-          <text
-            :x="(BUB_X0 + BUB_X1) / 2" :y="BUB_BASE + 34" text-anchor="middle"
-            :fill="MUT" font-size="8" font-weight="600"
-            font-family="'Noto Sans SC', Inter, sans-serif" letter-spacing="0.05em"
-          >意愿分数 · 1 不想做 → 10 很想做</text>
-
-          <!-- 决策气泡：自下而上逐个弹入；实心沉底=已执行，空心摞其上=未执行（手绘不规则墨圈） -->
-          <path
-            v-for="(d, i) in willChart.dots"
-            :key="`d${i}`"
-            :d="d.d"
-            :fill="d.completed ? HERO_DEEP : '#FFF2E1'"
-            :stroke="d.completed ? HERO_DEEP : MUT"
-            :stroke-width="d.completed ? 0.8 : 1.4"
-            stroke-linejoin="round"
-            class="box-pop"
-            :style="{ animationDelay: `${d.delay}s` }"
-          />
-        </svg>
+            <!-- 决策气泡：首次完整入镜才渲染并弹入；willPlayKey 变化重建 <g> 实现重放 -->
+            <g v-if="willSeen" :key="willPlayKey">
+              <path
+                v-for="(d, i) in willChart.dots"
+                :key="`d${i}`"
+                :d="d.d"
+                :fill="d.completed ? HERO_DEEP : '#FFF2E1'"
+                :stroke="d.completed ? HERO_DEEP : MUT"
+                :stroke-width="d.completed ? 0.8 : 1.4"
+                stroke-linejoin="round"
+                class="box-pop"
+                :style="{ animationDelay: `${d.delay}s` }"
+              />
+            </g>
+          </svg>
+        </div>
       </SketchBorder>
     </div>
 
     <!-- 归档记录抽屉：首页归档清掉的待办在这里查看 -->
-    <div v-if="isLoggedIn" class="mt-10">
+    <div v-if="isLoggedIn" class="mt-10" @mouseleave="onArchivedLeave">
       <button
         type="button"
         class="flex w-full items-center justify-between pb-3 sketch-border-b transition-opacity hover:opacity-70"
         :aria-expanded="showArchived"
-        @click="showArchived = !showArchived"
+        @click="toggleArchived"
+        @mouseenter="onArchivedEnter"
       >
         <span class="flex items-center gap-2">
           <span
@@ -445,22 +510,24 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
         </span>
       </button>
 
-      <div v-show="showArchived" class="mt-4 space-y-2">
+      <SketchCollapse :open="showArchived">
+      <div class="mt-4 space-y-2">
         <div v-if="!todoStore.archivedList.length" class="text-sm font-light text-sketch-lineSub">
           还没有归档记录——在首页计划表点「归档已完成」，清掉的待办会收在这里
         </div>
 
         <!-- 分类抽屉 -->
-        <div v-for="group in archivedGroups" :key="group.category">
+        <div v-for="group in archivedGroups" :key="group.category" @mouseleave="onArchivedCatLeave(group.category)">
           <button
             type="button"
             class="flex w-full items-center gap-2 px-1 py-2 text-left transition-opacity hover:opacity-70"
-            :aria-expanded="archivedFoldMap[group.category]"
+            :aria-expanded="isArchivedOpen(group.category)"
             @click="toggleArchivedFold(group.category)"
+            @mouseenter="onArchivedCatEnter(group.category)"
           >
             <span
               class="inline-flex items-center text-sketch-lineSub transition-transform duration-300"
-              :style="{ transform: archivedFoldMap[group.category] ? 'rotate(90deg)' : 'rotate(0deg)' }"
+              :style="{ transform: isArchivedOpen(group.category) ? 'rotate(90deg)' : 'rotate(0deg)' }"
             ><SketchCaret :size="10" /></span>
             <SketchChip tag>{{ categoryLabel[group.category] || group.category }}</SketchChip>
             <span class="text-xs text-sketch-lineSub font-en tracking-widest ml-auto">
@@ -468,7 +535,8 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
             </span>
           </button>
 
-          <div v-show="archivedFoldMap[group.category]" class="mt-1 space-y-1">
+          <SketchCollapse :open="isArchivedOpen(group.category)">
+          <div class="mt-1 space-y-1">
             <div
               v-for="todo in group.items"
               :key="todo.id"
@@ -493,8 +561,10 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
               </button>
             </div>
           </div>
+          </SketchCollapse>
         </div>
       </div>
+      </SketchCollapse>
     </div>
 
     <!-- 底部 -->

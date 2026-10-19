@@ -69,6 +69,8 @@ const linkedArchivedTodo = computed(() =>
 const inTodoList = computed(
   () => !!linkedTodo.value || !!linkedArchivedTodo.value
 );
+/** 取活跃或已归档的待办（无论是否归档，都能读到打卡感受与回应） */
+const displayedTodo = computed(() => linkedTodo.value ?? linkedArchivedTodo.value ?? null);
 
 const record = computed(() => store.getSessionWithTask(sessionId.value)?.record ?? null);
 
@@ -499,13 +501,30 @@ const categoryLabel: Record<string, string> = {
                   </svg>
                   <span class="text-sm font-light">
                     {{
-                      linkedTodo
-                        ? linkedTodo.done
+                      displayedTodo
+                        ? displayedTodo.done
                           ? "该待办已完成。"
                           : "已加入计划表，去首页勾选完成吧。"
-                        : "该待办已归档"
+                        : ""
                     }}
                   </span>
+                  <!-- 已归档标签：归档后仍保留评论，只加一个标记 -->
+                  <span
+                    v-if="linkedArchivedTodo"
+                    class="text-[10px] border border-sketch-line px-1.5 py-0.5 bg-sketch-bg"
+                  >已归档</span>
+                  <!-- 打卡感受与 Agent 回应：浅灰小字，整行折行显示（归档后仍保留） -->
+                  <div
+                    v-if="displayedTodo?.reflectionComment || displayedTodo?.reflectionReply"
+                    class="mt-1 w-full space-y-0.5 pl-[30px]"
+                  >
+                    <p v-if="displayedTodo?.reflectionComment" class="text-xs font-light text-sketch-lineSub">
+                      我的打卡感受：{{ displayedTodo.reflectionComment }}
+                    </p>
+                    <p v-if="displayedTodo?.reflectionReply" class="text-xs font-light text-sketch-lineSub">
+                      Agent 的回应：{{ displayedTodo.reflectionReply }}
+                    </p>
+                  </div>
                 </template>
                 <template v-else>
                   <span class="text-sm font-light text-sketch-lineSub">

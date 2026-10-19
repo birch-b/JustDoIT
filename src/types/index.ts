@@ -66,6 +66,14 @@ export interface TodoItem {
   archived: boolean;
   sessionId?: number | null;
   completedAt?: string | null;
+  /** 完成打卡时用户的可选感受 */
+  reflectionComment?: string | null;
+  /** Agent 对打卡感受的回应 */
+  reflectionReply?: string | null;
+  /** 下次询问「做了吗」的时间 */
+  checkinDueAt?: string | null;
+  /** 最近一次询问「做了吗」的时间 */
+  lastCheckinAt?: string | null;
   createdAt: string;
 }
 

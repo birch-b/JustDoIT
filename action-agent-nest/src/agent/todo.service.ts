@@ -6,6 +6,16 @@ import { Todo } from './entities/todo.entity';
 import { ActionRecord } from './entities/action-record.entity';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
+import { ReflectTodoDto } from './dto/reflect-todo.dto';
+import { buildCheckinReplyPrompt } from './agent.prompt';
+import { LlmService } from './llm.service';
+
+/** 无截止时间时的默认询问间隔：24h */
+const DEFAULT_CHECKIN_MS = 24 * 60 * 60 * 1000;
+/** 有截止时间时的最小询问间隔：1/3 时长但至少 10 分钟，避免刚创建就来问 */
+const MIN_CHECKIN_MS = 10 * 60 * 1000;
+/** 打卡回应的 LLM 失败兜底文案 */
+const CHECKIN_REPLY_FALLBACK = '记下了，又拍板又落地，这就很了不起。下次纠结，还来找大王聊。';
 
 @Injectable()
 export class TodoService {
@@ -14,6 +24,7 @@ export class TodoService {
     private readonly todoRepo: Repository<Todo>,
     @InjectRepository(ActionRecord)
     private readonly recordRepo: Repository<ActionRecord>,
+    private readonly llm: LlmService,
   ) {}
 
   /** 当前用户未归档待办（未完成在前，同组内新的在前） */
@@ -35,6 +46,7 @@ export class TodoService {
   }
 
   async create(userId: number, dto: CreateTodoDto) {
+    const now = new Date();
     const todo = this.todoRepo.create({
       userId,
       taskContent: dto.taskContent,
@@ -43,6 +55,8 @@ export class TodoService {
       sessionId: dto.sessionId ?? null,
       done: dto.done ?? false,
       completedAt: dto.done && dto.completedAt ? new Date(dto.completedAt) : null,
+      // 「做了吗」询问时间：有截止时间 → 时长的 1/3；没有 → 24h 后
+      checkinDueAt: dto.done ? null : this.nextCheckinDueAt(now, dto.deadline ?? null),
     });
     const saved = await this.todoRepo.save(todo);
     // 带会话的待办落库即视为「加入过计划表」：待办日后被删时，
@@ -63,9 +77,67 @@ export class TodoService {
     if (typeof dto.done === 'boolean') {
       todo.done = dto.done;
       todo.completedAt = dto.done ? new Date() : null;
+      // 完成即不再询问「做了吗」
+      if (dto.done) todo.checkinDueAt = null;
     }
     const saved = await this.todoRepo.save(todo);
     return this.toRes(saved);
+  }
+
+  /**
+   * 完成打卡：标记完成 + 存用户可选感受 + LLM 生成回应。
+   * 回复失败不阻塞打卡，返回固定兜底文案。
+   */
+  async reflect(userId: number, id: number, dto: ReflectTodoDto) {
+    const todo = await this.getOwned(userId, id);
+    const comment = (dto.comment ?? '').trim().slice(0, 500);
+    todo.done = true;
+    if (!todo.completedAt) todo.completedAt = new Date();
+    todo.checkinDueAt = null;
+    todo.reflectionComment = comment || null;
+    todo.reflectionReply = await this.generateCheckinReply(
+      todo.taskContent,
+      todo.category,
+      comment,
+    );
+    const saved = await this.todoRepo.save(todo);
+    return this.toRes(saved);
+  }
+
+  /** 答了「还没」（或忽略询问卡）：顺延到下一个询问点，开启新一轮 */
+  async postpone(userId: number, id: number) {
+    const todo = await this.getOwned(userId, id);
+    const now = new Date();
+    todo.lastCheckinAt = now;
+    if (!todo.done) {
+      todo.checkinDueAt = this.nextCheckinDueAt(now, todo.deadline);
+    }
+    const saved = await this.todoRepo.save(todo);
+    return this.toRes(saved);
+  }
+
+  /** 计算下次询问时间：有未来截止时间取时长的 1/3，否则 24h；下限 10 分钟 */
+  private nextCheckinDueAt(from: Date, deadline: string | null): Date {
+    const dl = deadline ? new Date(deadline) : null;
+    if (dl && !isNaN(dl.getTime()) && dl.getTime() > from.getTime()) {
+      const gap = dl.getTime() - from.getTime();
+      return new Date(from.getTime() + Math.max(gap / 3, MIN_CHECKIN_MS));
+    }
+    return new Date(from.getTime() + DEFAULT_CHECKIN_MS);
+  }
+
+  private async generateCheckinReply(
+    taskContent: string,
+    category: string,
+    comment: string,
+  ): Promise<string> {
+    try {
+      const messages = buildCheckinReplyPrompt({ taskContent, category, comment });
+      const text = await this.llm.chatText(messages, 0.7);
+      return text || CHECKIN_REPLY_FALLBACK;
+    } catch {
+      return CHECKIN_REPLY_FALLBACK;
+    }
   }
 
   /** 移出计划表：物理删除 todo 记录，但关联的 session 不受影响 */
@@ -120,6 +192,10 @@ export class TodoService {
       archived: t.archived,
       sessionId: t.sessionId,
       completedAt: t.completedAt ? t.completedAt.toISOString() : null,
+      reflectionComment: t.reflectionComment,
+      reflectionReply: t.reflectionReply,
+      checkinDueAt: t.checkinDueAt ? t.checkinDueAt.toISOString() : null,
+      lastCheckinAt: t.lastCheckinAt ? t.lastCheckinAt.toISOString() : null,
       createdAt: t.createdAt.toISOString(),
     };
   }

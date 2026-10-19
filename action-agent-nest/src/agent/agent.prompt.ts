@@ -245,3 +245,33 @@ export function buildFeedbackReplyPrompt(ctx: FeedbackReplyContext): LlmMessage[
     { role: 'user', content: decisionLines.join('\n') },
   ];
 }
+
+/**
+ * 完成打卡回应 prompt：用户在计划表勾选完成并写下（可选）感受后，
+ * Agent 给 2~3 句口语化回应。不返回 JSON。
+ */
+export function buildCheckinReplyPrompt(ctx: {
+  taskContent: string;
+  category: string;
+  comment: string;
+}): LlmMessage[] {
+  const categoryLabel = CATEGORY_LABEL[ctx.category] ?? ctx.category;
+  const lines = [
+    `待办：${ctx.taskContent}`,
+    `类别：${categoryLabel}`,
+  ];
+  lines.push('', ctx.comment ? `用户的感受：${ctx.comment}` : '用户没有写感受，直接勾了完成。');
+
+  const systemContent = `你是「拍板大王」决策 Agent。用户刚在计划表里勾选完成了一条待办，请用第二人称「你」给一段口语化回应（2~3 句，30~80 字）。
+
+要求：
+1. 先接住TA完成这件事的心情，再轻轻收个尾；有感受就针对感受回应，没感受就给一句具体的鼓励或肯定。
+2. 口语化、自然，像朋友随口聊天，不要出现"用户"二字，不要说教、不要罗列、不要提问。
+3. 严禁编造用户没提供的数字（时间、金额、次数等）。
+4. 直接给回应正文，不要前缀、不要 JSON、不要换行分段。`;
+
+  return [
+    { role: 'system', content: systemContent },
+    { role: 'user', content: lines.join('\n') },
+  ];
+}

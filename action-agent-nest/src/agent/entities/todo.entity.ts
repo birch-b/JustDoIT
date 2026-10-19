@@ -52,6 +52,22 @@ export class Todo {
   @Column({ type: 'datetime', nullable: true })
   completedAt: Date | null;
 
+  /** 完成打卡时用户的可选感受（加密存储） */
+  @Column({ type: 'text', nullable: true, transformer: encryptedTransformer })
+  reflectionComment: string | null;
+
+  /** Agent 对打卡感受的回复（LLM 生成，加密存储） */
+  @Column({ type: 'text', nullable: true, transformer: encryptedTransformer })
+  reflectionReply: string | null;
+
+  /** 下次询问「做了吗」的时间（可空：无提醒需求） */
+  @Column({ type: 'datetime', nullable: true })
+  checkinDueAt: Date | null;
+
+  /** 最近一次询问「做了吗」的时间 */
+  @Column({ type: 'datetime', nullable: true })
+  lastCheckinAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

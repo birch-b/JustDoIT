@@ -13,6 +13,7 @@ import {
 import { TodoService } from './todo.service';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
+import { ReflectTodoDto } from './dto/reflect-todo.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { GetUser } from '../common/decorators/get-user.decorator';
 
@@ -44,6 +45,25 @@ export class TodoController {
     @Body() dto: UpdateTodoDto,
   ) {
     return this.todoService.update(userId, id, dto);
+  }
+
+  /** 完成打卡：标记完成 + 可选感受 + Agent 回应 */
+  @Post(':id/reflect')
+  reflect(
+    @GetUser('userId') userId: number,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReflectTodoDto,
+  ) {
+    return this.todoService.reflect(userId, id, dto);
+  }
+
+  /** 答了「还没」/忽略询问：顺延到下一个询问点 */
+  @Post(':id/postpone')
+  postpone(
+    @GetUser('userId') userId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.todoService.postpone(userId, id);
   }
 
   /** 归档单条 */
