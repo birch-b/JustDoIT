@@ -66,6 +66,7 @@ const FALLBACK_CITY_GROUPS: CityGroup[] = [{
 }];
 const cityGroups = ref<CityGroup[]>(FALLBACK_CITY_GROUPS);
 let cityGroupsLoaded = false;
+let cityGroupsPromise: Promise<void> | null = null;
 const weatherProvinceInput = ref("");
 const weatherCityInput = ref(localStorage.getItem(WEATHER_CITY_KEY) ?? "");
 const weatherLoading = ref(false);
@@ -82,12 +83,28 @@ const currentCities = computed(
 const provinceOptions = computed(() => cityGroups.value.map((g) => ({ label: g.name, value: g.name })));
 const cityOptions = computed(() => currentCities.value.map((c) => ({ label: c, value: c })));
 
-/** 拉一次全国城市列表（后端有 7 天缓存）；失败静默沿用内置兜底 */
+/** 浏览器定位需要安全上下文（HTTPS 或 localhost）；HTTP 局域网访问时直接隐藏定位入口 */
+const canLocate = computed(
+  () => typeof window !== "undefined" && window.isSecureContext && !!navigator?.geolocation,
+);
+
+/** 拉一次全国省→市列表（后端有 7 天缓存）；失败静默沿用内置兜底，下次可重试 */
 async function ensureCityGroups() {
   if (cityGroupsLoaded) return;
-  cityGroupsLoaded = true;
-  const groups = await agentApi.fetchCityGroups();
-  if (groups) cityGroups.value = groups;
+  if (cityGroupsPromise) return cityGroupsPromise;
+  cityGroupsPromise = (async () => {
+    const groups = await agentApi.fetchCityGroups();
+    if (!groups) return;
+    cityGroups.value = groups;
+    cityGroupsLoaded = true;
+    // 记住的城市 → 回显所属省份，避免省份空着
+    if (!weatherProvinceInput.value && weatherCityInput.value) {
+      weatherProvinceInput.value = findProvince(weatherCityInput.value);
+    }
+  })().finally(() => {
+    cityGroupsPromise = null;
+  });
+  return cityGroupsPromise;
 }
 
 /** 找城市所属省份名；不在任何分组返回空串 */
@@ -144,10 +161,7 @@ function onProvinceChange() {
 /** 📍 自动定位：浏览器取经纬度(WGS84) → 后端百度逆地理转城市 → 查天气；返回是否成功 */
 async function locateWeather(): Promise<boolean> {
   weatherError.value = "";
-  if (!window.isSecureContext || typeof navigator === "undefined" || !navigator.geolocation) {
-    weatherError.value = "当前环境不支持定位（需要 HTTPS），手动选个城市吧";
-    return false;
-  }
+  if (!canLocate.value) return false;
   locating.value = true;
   clearWeather();
   try {
@@ -201,14 +215,14 @@ async function toggleWeather(on: boolean) {
     clearWeather();
     return;
   }
-  // 勾选：优先自动定位；失败（拒绝/超时/不支持）时回退记忆城市自动查一次，再不行才让用户手动选
-  const ok = await locateWeather();
-  if (!ok) {
-    const remembered = weatherCityInput.value.trim();
-    if (remembered) {
-      weatherProvinceInput.value = findProvince(remembered);
-      void queryWeather();
-    }
+  // 勾选：先把省→市列表拉下来（HTTP 无法定位时，省份下拉仍要能正常选）
+  await ensureCityGroups();
+  // 能定位就优先自动定位；失败（拒绝/超时/取不到城市）回退到记忆城市自动查一次，再不行让用户手动选
+  if (canLocate.value && (await locateWeather())) return;
+  const remembered = weatherCityInput.value.trim();
+  if (remembered) {
+    if (!weatherProvinceInput.value) weatherProvinceInput.value = findProvince(remembered);
+    void queryWeather();
   }
 }
 
@@ -493,6 +507,7 @@ function reset() {
                     />
                   </div>
                   <button
+                    v-if="canLocate"
                     type="button"
                     class="pb-1 text-xs font-light text-sketch-lineSub underline decoration-sketch-line/40 underline-offset-4 transition-colors hover:text-sketch-line disabled:opacity-50"
                     :disabled="locating"
