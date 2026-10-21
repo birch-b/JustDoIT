@@ -119,19 +119,28 @@ function askRemoveTodo(todo: { id: number; taskContent: string }) {
 
 // 完成打卡：勾选完成时先弹感受收集卡（可跳过），Agent 回应后更新待办
 const reflectTodo = ref<{ id: number; taskContent: string } | null>(null);
+const reflectResult = ref<{ comment: string; reply: string } | null>(null);
 const reflecting = ref(false);
 const reflectError = ref("");
 function askReflect(todo: { id: number; taskContent: string }) {
   reflectTodo.value = todo;
+  reflectResult.value = null;
   reflectError.value = "";
+}
+function closeReflect() {
+  reflectTodo.value = null;
+  reflectResult.value = null;
 }
 async function doReflect(comment: string) {
   if (!reflectTodo.value || reflecting.value) return;
   reflecting.value = true;
   reflectError.value = "";
   try {
-    await todoStore.reflectDone(reflectTodo.value.id, comment);
-    reflectTodo.value = null;
+    const updated = await todoStore.reflectDone(reflectTodo.value.id, comment);
+    reflectResult.value = {
+      comment,
+      reply: updated.reflectionReply || "做完就好，这次先记下。",
+    };
   } catch (e) {
     reflectError.value = (e as Error).message || "打卡失败，请重试";
   } finally {
@@ -671,7 +680,7 @@ function goLogin() {
       :open="confirmOpen"
       title="批量删除决策记录"
       en-title="DELETE RECORDS"
-      :message="`确定删除选中的 ${selectedIds.length} 条决策记录吗？任务输入、Agent 建议、反馈以及由它们加入计划表的待办将一并删除，且不可恢复。`"
+      :message="`确定删除选中的 ${selectedIds.length} 条决策记录吗？任务输入、AI建议、反馈以及由它们加入计划表的待办将一并删除，且不可恢复。`"
       confirm-text="确认删除"
       :loading="deleting"
       @confirm="doBatchDelete"
@@ -706,8 +715,10 @@ function goLogin() {
       :task-content="reflectTodo?.taskContent ?? ''"
       :loading="reflecting"
       :error="reflectError"
+      :result="reflectResult"
       @submit="doReflect"
-      @cancel="reflectTodo = null"
+      @cancel="closeReflect"
+      @close="closeReflect"
     />
 
     <!-- 登录后首次加载 / 网络异常全屏门屏（组件内部 Teleport 到 body） -->

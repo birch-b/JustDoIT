@@ -190,7 +190,7 @@ export const useTodoStore = defineStore("todo", {
     },
 
     /** 完成打卡：标记完成 + 可选感受 + Agent 回应（替代直接勾完成） */
-    async reflectDone(id: number, comment: string): Promise<void> {
+    async reflectDone(id: number, comment: string): Promise<TodoItem> {
       const item = this.list.find((t) => t.id === id);
       const updated = await todoApi.reflect(id, comment);
       if (item) Object.assign(item, updated);
@@ -214,6 +214,7 @@ export const useTodoStore = defineStore("todo", {
           // 反馈同步失败不影响打卡本身
         }
       }
+      return updated;
     },
 
     /** 答了「还没」/忽略询问：顺延到下一个询问点 */

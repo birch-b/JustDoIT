@@ -10,6 +10,7 @@ interface Props {
   taskContent: string;
   loading?: boolean;
   error?: string;
+  result?: { comment: string; reply: string } | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -20,6 +21,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: "submit", comment: string): void;
   (e: "cancel"): void;
+  (e: "close"): void;
 }>();
 
 const comment = ref("");
@@ -32,7 +34,9 @@ watch(
 );
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === "Escape" && props.open && !props.loading) emit("cancel");
+  if (e.key !== "Escape" || !props.open || props.loading) return;
+  if (props.result) emit("close");
+  else emit("cancel");
 }
 watch(
   () => props.open,
@@ -60,33 +64,55 @@ function submit() {
         aria-label="完成打卡"
       >
         <!-- 遮罩：loading 时不可误关 -->
-        <div class="absolute inset-0 bg-sketch-line/35" @click="!loading && emit('cancel')" />
+        <div
+          class="absolute inset-0 bg-sketch-line/35"
+          @click="loading ? undefined : result ? emit('close') : emit('cancel')"
+        />
         <div class="reflect-card relative w-full max-w-sm">
           <SketchBorder padding="1.75rem">
-            <DualTextBlock cn="完成打卡" en="DONE. NICE." size="sm" weight="normal" />
-            <p class="mt-3 text-sm font-light leading-relaxed text-sketch-line">
-              「{{ taskContent }}」做完啦。想说点什么吗？比如做得顺不顺、拖了多久、什么感受——
-              Agent 会回应你（不写也行）。
-            </p>
-            <textarea
-              v-model="comment"
-              class="sketch-input mt-3 w-full resize-none"
-              rows="3"
-              maxlength="500"
-              placeholder="随便写两句…"
-            />
-            <!-- 错误提示：行内手绘错误条 -->
-            <p v-if="error" class="mt-2 text-xs text-sketch-line border border-sketch-line/40 px-3 py-2">
-              {{ error }}
-            </p>
-            <div class="mt-5 flex flex-wrap justify-end gap-3">
-              <LinearButton size="sm" :disabled="loading" @click="emit('cancel')">
-                先不打卡
-              </LinearButton>
-              <LinearButton size="sm" :disabled="loading" @click="submit">
-                <span>{{ loading ? "Agent 回你中…" : "记下了" }}</span>
-              </LinearButton>
-            </div>
+            <template v-if="result">
+              <DualTextBlock cn="完成打卡" en="DONE. NICE." size="sm" weight="normal" />
+              <p class="mt-3 text-sm font-light leading-relaxed text-sketch-line">
+                「{{ taskContent }}」完成啦，这是你的评价和它的回应。
+              </p>
+              <div class="mt-4 space-y-2">
+                <p class="text-sm font-light leading-relaxed text-sketch-line">
+                  我：{{ result.comment || "（这次没写评价）" }}
+                </p>
+                <p class="text-sm font-light leading-relaxed text-sketch-line">
+                  Agent：{{ result.reply }}
+                </p>
+              </div>
+              <div class="mt-5 flex justify-end">
+                <LinearButton size="sm" @click="emit('close')">回到计划表</LinearButton>
+              </div>
+            </template>
+            <template v-else>
+              <DualTextBlock cn="完成打卡" en="DONE. NICE." size="sm" weight="normal" />
+              <p class="mt-3 text-sm font-light leading-relaxed text-sketch-line">
+                「{{ taskContent }}」做完啦。想说点什么吗？比如做得顺不顺、拖了多久、什么感受——
+                它会回应你（不写也行）。
+              </p>
+              <textarea
+                v-model="comment"
+                class="sketch-input mt-3 w-full resize-none"
+                rows="3"
+                maxlength="500"
+                placeholder="随便写两句…"
+              />
+              <!-- 错误提示：行内手绘错误条 -->
+              <p v-if="error" class="mt-2 text-xs text-sketch-line border border-sketch-line/40 px-3 py-2">
+                {{ error }}
+              </p>
+              <div class="mt-5 flex flex-wrap justify-end gap-3">
+                <LinearButton size="sm" :disabled="loading" @click="emit('cancel')">
+                  先不打卡
+                </LinearButton>
+                <LinearButton size="sm" :disabled="loading" @click="submit">
+                  <span>{{ loading ? "它在回你中…" : "记下了" }}</span>
+                </LinearButton>
+              </div>
+            </template>
           </SketchBorder>
         </div>
       </div>

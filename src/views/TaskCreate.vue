@@ -339,7 +339,7 @@ function reset() {
           v-if="submitting"
           class="fixed inset-0 z-50 flex items-center justify-center bg-sketch-bg/95"
         >
-          <SketchThinkingDots label="Agent 思考中" sub-label="THINKING" />
+          <SketchThinkingDots label="正在思考中" sub-label="THINKING" />
         </div>
       </Transition>
     </Teleport>
@@ -601,7 +601,7 @@ function reset() {
           <DualTextBlock cn="如何填写" en="HOW TO FILL" size="md" weight="normal" />
           <ul class="mt-4 space-y-3 text-sm font-light text-sketch-lineSub">
             <li class="flex gap-2"><SketchCheckbox :size="14" decorative /><span>尊重内心去填写意愿与精力。</span></li>
-            <li class="flex gap-2"><SketchCheckbox :size="14" decorative /><span>行动指数由 Agent 综合推算。</span></li>
+            <li class="flex gap-2"><SketchCheckbox :size="14" decorative /><span>行动指数由AI综合推算。</span></li>
             <li class="flex gap-2"><SketchCheckbox :size="14" decorative /><span>提交后将跳转结果页，可反馈真实行为。</span></li>
             <li class="flex gap-2"><SketchCheckbox :size="14" decorative /><span>适当选择不同因素的介入，也许会有意外的答复。</span></li>
           </ul>

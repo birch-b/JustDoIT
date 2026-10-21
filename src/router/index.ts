@@ -63,6 +63,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/views/Profile.vue"),
     meta: { title: "个人中心 | Profile", requiresAuth: true },
   },
+  {
+    // 兜底路由：未匹配任何地址时显示 404 页
+    path: "/:pathMatch(.*)*",
+    name: "not-found",
+    component: () => import("@/views/NotFound.vue"),
+    meta: { title: "页面不存在 | Not Found" },
+  },
 ];
 
 const router = createRouter({

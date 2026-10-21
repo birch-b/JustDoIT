@@ -267,7 +267,7 @@ function formatDate(iso: string): string {
         <SketchBorder padding="2rem">
           <DualTextBlock cn="注销账户" en="DELETE ACCOUNT" size="md" weight="normal" />
           <p class="mt-4 text-sm font-light leading-relaxed text-sketch-lineSub">
-            注销后，你的账号以及全部纠结任务、Agent 会话、行为反馈与统计数据将被
+            注销后，你的账号以及全部纠结任务、AI会话、行为反馈与统计数据将被
             <span class="text-sketch-line">永久删除且无法恢复</span>。请谨慎操作。
           </p>
 

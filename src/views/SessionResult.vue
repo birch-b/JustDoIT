@@ -267,7 +267,7 @@ const categoryLabel: Record<string, string> = {
     <div v-else-if="session" class="flex-1 flex flex-col">
       <!-- 顶部小标题 -->
       <div class="mb-8 flex items-center justify-between gap-4 sketch-border-b pb-3">
-        <DualTextBlock cn="Agent 结果" en="AGENT RESULT" size="md" weight="normal" />
+        <DualTextBlock cn="结果" en="RESULT" size="md" weight="normal" />
         <div class="flex items-center gap-5 shrink-0">
           <span class="text-xs text-sketch-lineSub font-en tracking-widest">
             SESSION #{{ session.sessionId }}<template v-if="createdAt"> · {{ formatDate(createdAt) }}</template>
@@ -480,7 +480,7 @@ const categoryLabel: Record<string, string> = {
 
               <!-- Agent 收到决定后的二次回复 -->
               <div v-if="replyText" class="sketch-border-l">
-                <DualTextBlock cn="Agent 的回应" en="AGENT REPLY" size="sm" weight="normal" />
+                <DualTextBlock cn="它的回应" en="REPLY" size="sm" weight="normal" />
                 <p class="mt-2 text-sm font-light leading-relaxed">
                   {{ replyText }}
                 </p>
@@ -522,7 +522,7 @@ const categoryLabel: Record<string, string> = {
                       我的打卡感受：{{ displayedTodo.reflectionComment }}
                     </p>
                     <p v-if="displayedTodo?.reflectionReply" class="text-xs font-light text-sketch-lineSub">
-                      Agent 的回应：{{ displayedTodo.reflectionReply }}
+                      它的回应：{{ displayedTodo.reflectionReply }}
                     </p>
                   </div>
                 </template>
@@ -553,7 +553,7 @@ const categoryLabel: Record<string, string> = {
       :open="confirmOpen"
       title="删除决策记录"
       en-title="DELETE RECORD"
-      message="任务输入、Agent 建议、反馈以及由它加入计划表的待办将一并删除，且不可恢复。"
+      message="任务输入、AI建议、反馈以及由它加入计划表的待办将一并删除，且不可恢复。"
       confirm-text="确认删除"
       :loading="deleting"
       @confirm="confirmDelete"
