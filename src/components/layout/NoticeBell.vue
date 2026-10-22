@@ -3,8 +3,9 @@
 // - 公告从后端拉取（只返回最近 7 天），localStorage 记录已读 id 与清除时间点
 // - 「清除」后不再显示清除时点之前的公告，有新公告会重新出现
 // - 反馈提交到后端 POST /api/feedback（需登录）
-// - 弹层 Teleport 到 body 的居中遮罩弹窗：避免 NavBar 容器裁剪（overflow-x 导致纵向也被裁），移动端/桌面统一
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+// - 面板锚定在铃铛右下方（下拉），Teleport 到 body 并用 fixed 定位，
+//   既不会被 NavBar 的 overflow-x-clip 裁掉，也不会有全屏遮罩盖住页面内容
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   getAnnouncements,
   ANNOUNCEMENT_TYPE_LABEL,
@@ -34,6 +35,31 @@ const hasUnread = computed(() => {
   return !!latest && String(latest.id) !== lastRead.value;
 });
 
+// ===== 下拉定位：跟随铃铛按钮，窗口尺寸/滚动时重算 =====
+const btnEl = ref<HTMLElement | null>(null);
+const panelEl = ref<HTMLElement | null>(null);
+const panelStyle = ref<Record<string, string>>({ top: "0px", right: "12px", width: "22rem" });
+
+function updatePos() {
+  const el = btnEl.value;
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  const vw = window.innerWidth;
+  // 窄屏铺满（左右各留 12px），桌面保持 22rem 宽贴在铃铛下方
+  const width = vw < 640 ? vw - 24 : Math.min(22 * 16, vw - 24);
+  const right = Math.max(12, vw - r.right);
+  const top = r.bottom + 10;
+  panelStyle.value = {
+    top: `${top}px`,
+    right: `${right}px`,
+    width: `${width}px`,
+    maxHeight: `${Math.max(240, window.innerHeight - top - 16)}px`,
+    background: "#F7F1E5",
+    borderRadius: "18px",
+    boxShadow: "4px 5px 0 rgba(99, 68, 66, 0.12)",
+  };
+}
+
 onMounted(async () => {
   try {
     announcements.value = await getAnnouncements();
@@ -41,9 +67,15 @@ onMounted(async () => {
     announcements.value = [];
   }
   document.addEventListener("keydown", onKey);
+  document.addEventListener("pointerdown", onDocPointerDown, true);
+  window.addEventListener("resize", updatePos);
+  window.addEventListener("scroll", updatePos, true);
 });
 onBeforeUnmount(() => {
   document.removeEventListener("keydown", onKey);
+  document.removeEventListener("pointerdown", onDocPointerDown, true);
+  window.removeEventListener("resize", updatePos);
+  window.removeEventListener("scroll", updatePos, true);
 });
 
 function markRead() {
@@ -58,17 +90,28 @@ function clearAll() {
   localStorage.setItem(CLEARED_AT_KEY, clearedAt.value);
 }
 
-function toggleOpen() {
+async function toggleOpen() {
   open.value = !open.value;
-  if (open.value && tab.value === "notice") markRead();
+  if (!open.value) return;
+  if (tab.value === "notice") markRead();
+  updatePos();
+  await nextTick();
+  updatePos();
 }
 watch(tab, (v) => {
   if (v === "notice" && open.value) markRead();
 });
 
-// Esc 关闭；遮罩点击关闭由模板 @click.self 处理
 function onKey(e: KeyboardEvent) {
   if (e.key === "Escape" && open.value) open.value = false;
+}
+
+// 点铃铛/面板之外才关闭；用 pointerdown 覆盖鼠标与触摸
+function onDocPointerDown(e: PointerEvent) {
+  if (!open.value) return;
+  const t = e.target as Node;
+  if (btnEl.value?.contains(t) || panelEl.value?.contains(t)) return;
+  open.value = false;
 }
 
 // 类型标签颜色：新增薄荷绿底 / 优化奶米深底 / 修复空心描边
@@ -116,6 +159,7 @@ watch(tab, (v) => {
   <div class="relative shrink-0">
     <!-- 铃铛按钮 -->
     <button
+      ref="btnEl"
       class="relative flex h-10 w-10 items-center justify-center hover:bg-sketch-hover transition-colors"
       aria-label="公告与反馈"
       @click="toggleOpen"
@@ -142,61 +186,58 @@ watch(tab, (v) => {
       />
     </button>
 
-    <!-- 居中遮罩弹窗：挂 body，不受 NavBar 裁剪；点遮罩关闭，点卡片内部不关 -->
+    <!-- 下拉面板：挂在 body 上避免 NavBar 裁剪，位置贴在铃铛右下方；完全不透明，不与页面内容混叠 -->
     <Teleport to="body">
       <Transition name="bell">
         <div
           v-if="open"
-          class="fixed inset-0 z-[80] flex items-center justify-center p-4"
-          style="background: rgba(99, 68, 66, 0.18)"
-          role="dialog"
-          aria-label="公告与反馈"
-          @click.self="open = false"
+          ref="panelEl"
+          class="fixed z-[80] flex flex-col overflow-hidden"
+          :style="panelStyle"
         >
-          <div class="w-full max-w-sm">
-            <SketchBorder padding="1.25rem 1.5rem">
-              <div class="bg-sketch-bg">
-                <!-- 标题行 + 关闭 -->
-                <div class="flex items-center justify-between">
-                  <!-- Tab 切换 -->
-                  <div class="flex gap-5 border-b border-sketch-line/20 pb-2 flex-1">
-                    <button
-                      class="text-sm font-light transition-colors"
-                      :class="tab === 'notice' ? 'text-sketch-line' : 'text-sketch-lineSub hover:text-sketch-line'"
-                      @click="tab = 'notice'"
-                    >
-                      公告
-                      <span class="ml-1 text-[10px] font-en tracking-widest opacity-60">NOTICE</span>
-                      <span
-                        class="mt-0.5 block h-px bg-sketch-accent transition-all duration-300"
-                        :class="tab === 'notice' ? 'w-full' : 'w-0'"
-                      />
-                    </button>
-                    <button
-                      class="text-sm font-light transition-colors"
-                      :class="tab === 'feedback' ? 'text-sketch-line' : 'text-sketch-lineSub hover:text-sketch-line'"
-                      @click="tab = 'feedback'"
-                    >
-                      意见反馈
-                      <span class="ml-1 text-[10px] font-en tracking-widest opacity-60">FEEDBACK</span>
-                      <span
-                        class="mt-0.5 block h-px bg-sketch-accent transition-all duration-300"
-                        :class="tab === 'feedback' ? 'w-full' : 'w-0'"
-                      />
-                    </button>
-                  </div>
+          <SketchBorder padding="1.25rem 1.5rem" class="flex min-h-0 flex-col">
+            <div class="flex min-h-0 flex-1 flex-col">
+              <!-- 标题行 + 关闭 -->
+              <div class="flex shrink-0 items-center justify-between">
+                <div class="flex flex-1 gap-5 border-b border-sketch-line/20 pb-2">
                   <button
-                    class="mb-2 ml-3 shrink-0 text-sketch-lineSub hover:text-sketch-line transition-colors"
-                    aria-label="关闭"
-                    @click="open = false"
+                    class="text-sm font-light transition-colors"
+                    :class="tab === 'notice' ? 'text-sketch-line' : 'text-sketch-lineSub hover:text-sketch-line'"
+                    @click="tab = 'notice'"
                   >
-                    ✕
+                    公告
+                    <span class="ml-1 text-[10px] font-en tracking-widest opacity-60">NOTICE</span>
+                    <span
+                      class="mt-0.5 block h-px bg-sketch-accent transition-all duration-300"
+                      :class="tab === 'notice' ? 'w-full' : 'w-0'"
+                    />
+                  </button>
+                  <button
+                    class="text-sm font-light transition-colors"
+                    :class="tab === 'feedback' ? 'text-sketch-line' : 'text-sketch-lineSub hover:text-sketch-line'"
+                    @click="tab = 'feedback'"
+                  >
+                    意见反馈
+                    <span class="ml-1 text-[10px] font-en tracking-widest opacity-60">FEEDBACK</span>
+                    <span
+                      class="mt-0.5 block h-px bg-sketch-accent transition-all duration-300"
+                      :class="tab === 'feedback' ? 'w-full' : 'w-0'"
+                    />
                   </button>
                 </div>
+                <button
+                  class="mb-2 ml-3 shrink-0 text-sketch-lineSub transition-colors hover:text-sketch-line"
+                  aria-label="关闭"
+                  @click="open = false"
+                >
+                  ✕
+                </button>
+              </div>
 
-                <!-- 公告列表 -->
-                <div v-if="tab === 'notice'" class="mt-3">
-                  <div v-if="visible.length" class="max-h-[60vh] space-y-5 overflow-y-auto pr-1">
+              <!-- 公告列表 -->
+              <div v-if="tab === 'notice'" class="mt-3 flex min-h-0 flex-1 flex-col">
+                <div v-if="visible.length" class="flex min-h-0 flex-1 flex-col">
+                  <div class="min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
                     <div v-for="a in visible" :key="a.id">
                       <div class="flex items-baseline justify-between gap-2">
                         <p class="text-sm font-light text-sketch-line">{{ a.title }}</p>
@@ -220,57 +261,57 @@ watch(tab, (v) => {
                         </li>
                       </ul>
                     </div>
-                    <div class="flex justify-end pt-1">
-                      <button
-                        class="text-[11px] text-sketch-lineSub hover:text-sketch-line transition-colors"
-                        @click="clearAll"
-                      >
-                        清除全部
-                      </button>
-                    </div>
                   </div>
-                  <p v-else class="py-6 text-center text-xs font-light text-sketch-lineSub">
-                    最近 7 天没有新公告。
-                  </p>
-                </div>
-
-                <!-- 意见反馈 -->
-                <div v-else class="mt-3">
-                  <template v-if="!feedbackDone">
-                    <p class="text-xs font-light text-sketch-lineSub">
-                      哪里用着不顺、想要什么功能，直接说。
-                    </p>
-                    <textarea
-                      v-model="content"
-                      class="sketch-input mt-2 w-full resize-none"
-                      rows="4"
-                      maxlength="1000"
-                      placeholder="写点什么…"
-                    />
-                    <p
-                      v-if="feedbackError"
-                      class="mt-2 border border-sketch-line/40 px-3 py-2 text-xs text-sketch-line"
+                  <div class="flex shrink-0 justify-end pt-2">
+                    <button
+                      class="text-[11px] text-sketch-lineSub transition-colors hover:text-sketch-line"
+                      @click="clearAll"
                     >
-                      {{ feedbackError }}
-                    </p>
-                    <div class="mt-3 flex justify-end">
-                      <LinearButton size="sm" :disabled="sending" @click="submitFeedback">
-                        <span>{{ sending ? "提交中…" : "提交" }}</span>
-                      </LinearButton>
-                    </div>
-                  </template>
-                  <template v-else>
-                    <p class="py-6 text-center text-sm font-light text-sketch-line">
-                      收到了，谢谢你。
-                    </p>
-                    <p class="pb-2 text-center text-xs font-light text-sketch-lineSub">
-                      每一条反馈都会认真看。
-                    </p>
-                  </template>
+                      清除全部
+                    </button>
+                  </div>
                 </div>
+                <p v-else class="py-6 text-center text-xs font-light text-sketch-lineSub">
+                  最近 7 天没有新公告。
+                </p>
               </div>
-            </SketchBorder>
-          </div>
+
+              <!-- 意见反馈 -->
+              <div v-else class="mt-3">
+                <template v-if="!feedbackDone">
+                  <p class="text-xs font-light text-sketch-lineSub">
+                    哪里用着不顺、想要什么功能，直接说。
+                  </p>
+                  <textarea
+                    v-model="content"
+                    class="sketch-input mt-2 w-full resize-none"
+                    rows="4"
+                    maxlength="1000"
+                    placeholder="写点什么…"
+                  />
+                  <p
+                    v-if="feedbackError"
+                    class="mt-2 border border-sketch-line/40 px-3 py-2 text-xs text-sketch-line"
+                  >
+                    {{ feedbackError }}
+                  </p>
+                  <div class="mt-3 flex justify-end">
+                    <LinearButton size="sm" :disabled="sending" @click="submitFeedback">
+                      <span>{{ sending ? "提交中…" : "提交" }}</span>
+                    </LinearButton>
+                  </div>
+                </template>
+                <template v-else>
+                  <p class="py-6 text-center text-sm font-light text-sketch-line">
+                    收到了，谢谢你。
+                  </p>
+                  <p class="pb-2 text-center text-xs font-light text-sketch-lineSub">
+                    每一条反馈都会认真看。
+                  </p>
+                </template>
+              </div>
+            </div>
+          </SketchBorder>
         </div>
       </Transition>
     </Teleport>
@@ -281,8 +322,8 @@ watch(tab, (v) => {
 .bell-enter-active,
 .bell-leave-active {
   transition:
-    opacity 0.2s ease,
-    transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+    opacity 0.18s ease,
+    transform 0.2s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .bell-enter-from,
 .bell-leave-to {
