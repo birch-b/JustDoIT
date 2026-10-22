@@ -16,8 +16,6 @@ const emit = defineEmits<{
 const open = ref(false);
 /** 组件根元素，用于点外部关闭 */
 const rootEl = ref<HTMLElement | null>(null);
-/** 时间子下拉：'hour' / 'minute' / null（同一时间只展开一个） */
-const openTimeMenu = ref<"hour" | "minute" | null>(null);
 const today = new Date();
 
 // 当前浏览的月份
@@ -36,6 +34,7 @@ watch(() => props.modelValue, (v) => {
     const d = new Date(v);
     selHour.value = d.getHours();
     selMinute.value = d.getMinutes();
+    scrollWheelsToCurrent();
   }
 });
 
@@ -90,21 +89,33 @@ function emitValue() {
   emit("update:modelValue", `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(selHour.value)}:${pad(selMinute.value)}`);
 }
 
-function setHour(h: number) {
-  selHour.value = h;
-  openTimeMenu.value = null;
-  if (selectedDate.value) {
-    selectedDate.value = new Date(selectedDate.value.getFullYear(), selectedDate.value.getMonth(), selectedDate.value.getDate(), selHour.value, selMinute.value);
-    emitValue();
-  }
+// ===== 时间滚轴（微信提醒式：scroll-snap 滚动选择，时/分两列） =====
+const WHEEL_ITEM_H = 32;
+const hourColEl = ref<HTMLElement | null>(null);
+const minuteColEl = ref<HTMLElement | null>(null);
+let wheelRaf = 0;
+
+function syncTime() {
+  if (!selectedDate.value) return;
+  const d = selectedDate.value;
+  selectedDate.value = new Date(d.getFullYear(), d.getMonth(), d.getDate(), selHour.value, selMinute.value);
+  emitValue();
 }
-function setMinute(m: number) {
-  selMinute.value = m;
-  openTimeMenu.value = null;
-  if (selectedDate.value) {
-    selectedDate.value = new Date(selectedDate.value.getFullYear(), selectedDate.value.getMonth(), selectedDate.value.getDate(), selHour.value, selMinute.value);
-    emitValue();
-  }
+
+function onWheelScroll(kind: "hour" | "minute", e: Event) {
+  const el = e.target as HTMLElement;
+  cancelAnimationFrame(wheelRaf);
+  wheelRaf = requestAnimationFrame(() => {
+    const max = kind === "hour" ? 23 : 59;
+    const idx = Math.max(0, Math.min(max, Math.round(el.scrollTop / WHEEL_ITEM_H)));
+    if (kind === "hour" && idx !== selHour.value) { selHour.value = idx; syncTime(); }
+    if (kind === "minute" && idx !== selMinute.value) { selMinute.value = idx; syncTime(); }
+  });
+}
+
+function scrollWheelsToCurrent() {
+  hourColEl.value?.scrollTo({ top: selHour.value * WHEEL_ITEM_H });
+  minuteColEl.value?.scrollTo({ top: selMinute.value * WHEEL_ITEM_H });
 }
 
 function clearDate() {
@@ -126,12 +137,14 @@ function onDocMouseDown(e: MouseEvent) {
   if (!open.value) return;
   if (rootEl.value && !rootEl.value.contains(e.target as Node)) {
     open.value = false;
-    openTimeMenu.value = null;
   }
 }
 function toggleOpen() {
   open.value = !open.value;
-  if (!open.value) openTimeMenu.value = null;
+  if (open.value) {
+    // 打开后滚轴定位到当前时间
+    requestAnimationFrame(() => scrollWheelsToCurrent());
+  }
 }
 
 onMounted(() => document.addEventListener("mousedown", onDocMouseDown));
@@ -210,69 +223,44 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
           </template>
         </div>
 
-        <!-- 时间选择（自绘下拉，与手绘风一致；不能用原生 select + mousedown.prevent） -->
-        <div class="relative flex items-center justify-center gap-2 px-3 py-1.5" style="border-top: 1px dashed rgba(99,68,66,0.2)">
-          <!-- 小时 -->
-          <div class="relative">
-            <button
-              type="button"
-              class="flex items-center gap-1 bg-transparent text-sm font-light text-sketch-line outline-none cursor-pointer"
-              @click="openTimeMenu = openTimeMenu === 'hour' ? null : 'hour'"
+        <!-- 时间滚轴（微信提醒式：日期在上面日历选，时间在这里滚动选） -->
+        <div class="relative px-3 py-1.5" style="border-top: 1px dashed rgba(99,68,66,0.2)">
+          <div class="relative flex justify-center gap-6">
+            <!-- 中心指示条 -->
+            <div
+              class="pointer-events-none absolute left-2 right-2 top-1/2 -translate-y-1/2"
+              style="height:32px;border-top:1.5px solid rgba(99,68,66,0.25);border-bottom:1.5px solid rgba(99,68,66,0.25)"
+            ></div>
+            <!-- 小时列 -->
+            <div
+              ref="hourColEl"
+              class="wheel-col"
+              @scroll.passive="onWheelScroll('hour', $event)"
             >
-              {{ pad2(selHour) }}
-              <svg class="w-2.5 h-2.5" viewBox="0 0 12 8" fill="none">
-                <path d="M1,1.5 L6,6.5 L11,1.5" stroke="#634442" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <ul
-              v-if="openTimeMenu === 'hour'"
-              class="absolute bottom-full left-1/2 z-50 mb-1 -translate-x-1/2 py-1 overflow-y-auto"
-              style="width:4.5rem;max-height:8.4rem;background:#F7F1E5;border:1.5px solid #634442;box-shadow:2px 2px 0 rgba(99,68,66,0.15)"
-            >
-              <li
+              <div style="height:32px"></div>
+              <div
                 v-for="h in hours"
                 :key="h"
-                class="px-2 py-0.5 text-center text-sm font-light cursor-pointer"
-                :class="h === selHour ? '' : 'text-sketch-line hover:bg-sketch-line/8'"
-                :style="h === selHour ? 'color:#7FA89F;background:rgba(127,168,159,0.15)' : ''"
-                @click="setHour(h)"
-              >
-                {{ pad2(h) }}
-              </li>
-            </ul>
-          </div>
-
-          <span class="text-sketch-line text-sm">:</span>
-
-          <!-- 分钟 -->
-          <div class="relative">
-            <button
-              type="button"
-              class="flex items-center gap-1 bg-transparent text-sm font-light text-sketch-line outline-none cursor-pointer"
-              @click="openTimeMenu = openTimeMenu === 'minute' ? null : 'minute'"
+                class="wheel-item"
+                :class="h === selHour ? 'text-sketch-line' : 'text-sketch-lineSub/50'"
+              >{{ pad2(h) }} 时</div>
+              <div style="height:32px"></div>
+            </div>
+            <!-- 分钟列 -->
+            <div
+              ref="minuteColEl"
+              class="wheel-col"
+              @scroll.passive="onWheelScroll('minute', $event)"
             >
-              {{ pad2(selMinute) }}
-              <svg class="w-2.5 h-2.5" viewBox="0 0 12 8" fill="none">
-                <path d="M1,1.5 L6,6.5 L11,1.5" stroke="#634442" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-         <ul
-  v-if="openTimeMenu === 'minute'"
-  class="absolute bottom-full left-1/2 z-50 mb-1 -translate-x-1/2 py-1 overflow-y-auto"
-  style="width:4.5rem;max-height:8.4rem;background:#F7F1E5;border:1.5px solid #634442;box-shadow:2px 2px 0 rgba(99,68,66,0.15)"
->
-
-              <li
+              <div style="height:32px"></div>
+              <div
                 v-for="m in minutes"
                 :key="m"
-                class="px-2 py-0.5 text-center text-sm font-light cursor-pointer"
-                :class="m === selMinute ? '' : 'text-sketch-line hover:bg-sketch-line/8'"
-                :style="m === selMinute ? 'color:#7FA89F;background:rgba(127,168,159,0.15)' : ''"
-                @click="setMinute(m)"
-              >
-                {{ pad2(m) }}
-              </li>
-            </ul>
+                class="wheel-item"
+                :class="m === selMinute ? 'text-sketch-line' : 'text-sketch-lineSub/50'"
+              >{{ pad2(m) }} 分</div>
+              <div style="height:32px"></div>
+            </div>
           </div>
         </div>
 
@@ -289,4 +277,26 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 <style scoped>
 .drop-enter-active, .drop-leave-active { transition: opacity 0.15s ease, transform 0.15s ease; }
 .drop-enter-from, .drop-leave-to { opacity: 0; transform: translateY(-4px); }
+
+/* 时间滚轴：scroll-snap 让每行自动吸附到中心，隐藏滚动条 */
+.wheel-col {
+  height: 96px; /* 3 行 */
+  width: 4.5rem;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  text-align: center;
+}
+.wheel-col::-webkit-scrollbar { display: none; }
+.wheel-item {
+  height: 32px;
+  line-height: 32px;
+  scroll-snap-align: center;
+  font-size: 0.875rem;
+  font-weight: 300;
+  transition: color 0.15s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wheel-item { transition: none; }
+}
 </style>

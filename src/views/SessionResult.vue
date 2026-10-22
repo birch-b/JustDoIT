@@ -374,8 +374,7 @@ const categoryLabel: Record<string, string> = {
             <DualTextBlock cn="纠结内容" en="CONTENT" size="sm" weight="normal" />
             <div class="mt-3 grid grid-cols-2 gap-4 text-sm font-light">
               <div>
-                <p class="text-[10px] text-sketch-lineSub font-en tracking-widest">CONTENT</p>
-                <p class="mt-1">{{ task.taskContent }}</p>
+                <p>{{ task.taskContent }}</p>
               </div>
               <div>
                 <p class="text-[10px] text-sketch-lineSub font-en tracking-widest">CATEGORY / DEADLINE</p>

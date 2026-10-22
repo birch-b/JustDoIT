@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 后台管理页 /admin（仅 role=admin 可访问，路由守卫拦截）
 // 区块：站点统计卡片 / 活跃用户 / 反馈收集 / 公告管理
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import {
   adminApi,
   type AdminOverview,
@@ -20,6 +20,8 @@ import SketchBorder from "@/components/sketch/SketchBorder.vue";
 import DualTextBlock from "@/components/sketch/DualTextBlock.vue";
 import LinearButton from "@/components/sketch/LinearButton.vue";
 import SketchConfirmDialog from "@/components/sketch/SketchConfirmDialog.vue";
+import SketchCaret from "@/components/sketch/SketchCaret.vue";
+import SketchCollapse from "@/components/sketch/SketchCollapse.vue";
 
 const overview = ref<AdminOverview | null>(null);
 const users = ref<AdminUserItem[]>([]);
@@ -32,6 +34,28 @@ function fmtTime(iso: string) {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// 反馈按月份归纳：最新的月份默认展开，其余折叠
+const groupedFeedbacks = computed(() => {
+  const map = new Map<string, AdminFeedbackItem[]>();
+  for (const f of feedbacks.value) {
+    const key = f.createdAt.slice(0, 7); // yyyy-MM
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(f);
+  }
+  return [...map.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([key, list]) => {
+      const [y, m] = key.split("-");
+      return { key, label: `${y} 年 ${Number(m)} 月`, list };
+    });
+});
+const openGroups = ref<Set<string>>(new Set());
+function toggleGroup(key: string) {
+  if (openGroups.value.has(key)) openGroups.value.delete(key);
+  else openGroups.value.add(key);
+  openGroups.value = new Set(openGroups.value);
 }
 
 async function loadAll() {
@@ -48,6 +72,9 @@ async function loadAll() {
     users.value = u;
     feedbacks.value = f;
     announcements.value = a;
+    // 最新月份的反馈默认展开，其余折叠
+    const first = groupedFeedbacks.value[0];
+    openGroups.value = first ? new Set([first.key]) : new Set();
   } catch (e) {
     errorMsg.value = (e as Error).message || "加载失败";
   } finally {
@@ -250,17 +277,39 @@ function tagClass(type: AnnouncementItem["type"]) {
             <p v-if="!feedbacks.length" class="text-xs font-light text-sketch-lineSub">
               还没有收到反馈。
             </p>
-            <ul v-else class="divide-y divide-sketch-line/15">
-              <li v-for="f in feedbacks" :key="f.id" class="py-2.5">
-                <div class="flex items-baseline justify-between gap-2">
-                  <span class="text-xs text-sketch-line">{{ f.username }}</span>
-                  <span class="shrink-0 text-[10px] text-sketch-lineSub">{{ fmtTime(f.createdAt) }}</span>
-                </div>
-                <p class="mt-1 whitespace-pre-wrap text-sm font-light leading-relaxed text-sketch-lineSub">
-                  {{ f.content }}
-                </p>
-              </li>
-            </ul>
+            <div v-else class="space-y-3">
+              <div v-for="g in groupedFeedbacks" :key="g.key">
+                <!-- 月份抽屉头 -->
+                <button
+                  type="button"
+                  class="flex w-full items-center justify-between pb-1 text-left"
+                  :aria-expanded="openGroups.has(g.key)"
+                  @click="toggleGroup(g.key)"
+                >
+                  <span class="flex items-center gap-2">
+                    <span
+                      class="inline-flex items-center text-sketch-lineSub transition-transform duration-300"
+                      :style="{ transform: openGroups.has(g.key) ? 'rotate(90deg)' : 'rotate(0deg)' }"
+                    ><SketchCaret :size="10" /></span>
+                    <span class="text-xs font-light text-sketch-lineSub">{{ g.label }}</span>
+                  </span>
+                  <span class="text-[10px] text-sketch-lineSub font-en tracking-widest">{{ g.list.length }}</span>
+                </button>
+                <SketchCollapse :open="openGroups.has(g.key)">
+                  <ul class="mt-1 divide-y divide-sketch-line/15">
+                    <li v-for="f in g.list" :key="f.id" class="py-2.5">
+                      <div class="flex items-baseline justify-between gap-2">
+                        <span class="text-xs text-sketch-line">{{ f.username }}</span>
+                        <span class="shrink-0 text-[10px] text-sketch-lineSub">{{ fmtTime(f.createdAt) }}</span>
+                      </div>
+                      <p class="mt-1 whitespace-pre-wrap text-sm font-light leading-relaxed text-sketch-lineSub">
+                        {{ f.content }}
+                      </p>
+                    </li>
+                  </ul>
+                </SketchCollapse>
+              </div>
+            </div>
           </SketchBorder>
         </section>
 
