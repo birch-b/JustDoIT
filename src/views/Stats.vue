@@ -113,6 +113,9 @@ const categoryLabel: Record<string, string> = {
   shopping: "购物",
   health: "健康",
   social: "社交",
+  finance: "财务理财",
+  relationship: "情感关系",
+  family: "家庭",
   other: "其他",
 };
 

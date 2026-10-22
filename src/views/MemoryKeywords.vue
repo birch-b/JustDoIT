@@ -10,6 +10,8 @@ import {
   MEMORY_TYPE_LABEL,
   type UserMemoryItem,
 } from "@/api/memoryApi";
+import { useUserStore } from "@/store/userStore";
+import { openQuestionnaire } from "@/components/onboarding/PreferenceQuestionnaire.vue";
 import PageWrapper from "@/components/layout/PageWrapper.vue";
 import SketchBorder from "@/components/sketch/SketchBorder.vue";
 import DualTextBlock from "@/components/sketch/DualTextBlock.vue";
@@ -67,6 +69,11 @@ interface KeywordBubble {
 const memories = ref<UserMemoryItem[]>([]);
 const loading = ref(false);
 const errorMsg = ref("");
+const userStore = useUserStore();
+
+function editPreference() {
+  openQuestionnaire(userStore.currentUser?.preference ?? null);
+}
 
 // 去重后的关键词气泡（全部展示，不按置信度区分颜色）
 const keywordBubbles = computed<KeywordBubble[]>(() => {
@@ -267,9 +274,12 @@ onMounted(load);
       </SketchBorder>
 
       <!-- 新增按钮 -->
-      <div class="mt-6">
+      <div class="mt-6 flex items-center gap-3">
         <LinearButton v-if="!showCreate" size="sm" @click="showCreate = true">
           + 手动添加一条
+        </LinearButton>
+        <LinearButton size="sm" @click="editPreference">
+          <span>偏好设置</span>
         </LinearButton>
       </div>
 

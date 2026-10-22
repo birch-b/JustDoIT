@@ -3,12 +3,23 @@ import { authRequest } from "./http";
 
 const BASE_URL = "/api/user";
 
+/** 用户冷启动偏好问卷数据 */
+export interface UserPreference {
+  interests: string[];        // 感兴趣的事
+  agonizeOver: string[];      // 容易纠结的事
+  decisionStyle: string;      // 决策风格
+  values: string[];           // 看重的东西
+  customNote: string;         // 补充说明
+}
+
 /** 后端返回的用户信息 */
 export interface AuthUser {
   id: number;
   username: string;
   email: string;
   bio?: string;        // 个人简介，空串代表未设置
+  preference?: UserPreference | null; // 冷启动偏好问卷，未填为 null
+  role?: string;       // user / admin
   createdAt?: string | null; // 注册时间 ISO 串
 }
 
@@ -103,6 +114,14 @@ export const userApi = {
     return authRequest<UpdateProfileRes>(`${BASE_URL}/profile`, {
       method: "PATCH",
       body: JSON.stringify(payload),
+    });
+  },
+
+  /** 更新用户偏好问卷：PATCH /api/user/preference（需登录；整体覆盖 preference JSON） */
+  updatePreference(preference: UserPreference) {
+    return authRequest<UpdateProfileRes>(`${BASE_URL}/preference`, {
+      method: "PATCH",
+      body: JSON.stringify({ preference }),
     });
   },
 };

@@ -234,6 +234,9 @@ const categories: { value: TaskCategory; cn: string }[] = [
   { value: "shopping", cn: "消费购物" },
   { value: "health", cn: "健康" },
   { value: "social", cn: "社交" },
+  { value: "finance", cn: "财务理财" },
+  { value: "relationship", cn: "情感关系" },
+  { value: "family", cn: "家庭" },
   { value: "other", cn: "其他" },
 ];
 

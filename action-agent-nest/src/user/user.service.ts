@@ -7,6 +7,7 @@ import { User } from './entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdatePreferenceDto } from './dto/update-preference.dto';
 import { VerifyCodeService } from './verify-code.service';
 import { MailService } from './mail.service';
 // 业务逻辑：
@@ -34,6 +35,8 @@ export class UserService {
       username: user.username,
       email: user.email,
       bio: user.bio ?? '',
+      preference: user.preference ?? null,
+      role: user.role ?? 'user',
       createdAt: user.createAt
         ? new Date(user.createAt).toISOString()
         : null,
@@ -209,6 +212,20 @@ export class UserService {
       user.bio = dto.bio.trim();
     }
 
+    const saved = await this.userRepo.save(user);
+    return { user: this.toUserResponse(saved) };
+  }
+
+  /**
+   * 更新用户偏好问卷：登录态下整体覆盖 preference 字段（JSON）。
+   * 前端负责传结构化对象；后端原样保存并返回更新后的 user。
+   */
+  async updatePreference(userId: number, dto: UpdatePreferenceDto) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('用户不存在');
+    }
+    user.preference = dto.preference;
     const saved = await this.userRepo.save(user);
     return { user: this.toUserResponse(saved) };
   }

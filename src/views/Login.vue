@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 登录页 /login
-import { reactive, ref, computed } from "vue";
+import { reactive, ref, computed, onMounted } from "vue";
 import { useRouter, useRoute, RouterLink } from "vue-router";
 import { useUserStore } from "@/store/userStore";
 import PageWrapper from "@/components/layout/PageWrapper.vue";
@@ -34,6 +34,13 @@ const form = reactive({
 });
 const errorMsg = ref("");
 const loading = ref(false);
+
+// 已登录时直接进入目标页，避免邮件链接把已登录用户留在登录页
+onMounted(() => {
+  if (userStore.isLoggedIn) {
+    router.push(redirect.value);
+  }
+});
 
 async function submit() {
   errorMsg.value = "";

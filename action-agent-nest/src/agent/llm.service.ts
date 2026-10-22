@@ -25,6 +25,7 @@ export class LlmService {
       tarotCard?: string;
       answerBookText?: string;
       lastSession?: { taskContent: string; category: string; conclusion: string };
+      preferenceText?: string;
     },
   ): Promise<LlmAdvice | null> {
     const messages = buildPrompt(dto, historySummary, memoryText, extras);

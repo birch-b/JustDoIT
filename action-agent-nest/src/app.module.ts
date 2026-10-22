@@ -6,6 +6,8 @@ import { UserModule } from './user/user.module';
 import { JwtStrategy } from './common/strategies/jwt.strategy';
 import { AgentModule } from './agent/agent.module';
 import { MemoryModule } from './memory/memory.module';
+import { FeedbackModule } from './feedback/feedback.module';
+import { AdminModule } from './admin/admin.module';
 // 加载自定义配置文件
 import configuration from './config/configuration';
 
@@ -40,7 +42,11 @@ import configuration from './config/configuration';
 
     AgentModule,
 
-    MemoryModule
+    MemoryModule,
+
+    FeedbackModule,
+
+    AdminModule
   ],
   providers: [JwtStrategy],
 })

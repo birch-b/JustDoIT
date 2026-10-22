@@ -30,6 +30,9 @@ const CATEGORY_LABEL: Record<string, string> = {
   shopping: '购物',
   health: '健康',
   social: '社交',
+  finance: '财务理财',
+  relationship: '情感关系',
+  family: '家庭',
   other: '其他',
 };
 
@@ -48,6 +51,8 @@ export function buildPrompt(
     answerBookText?: string;
     /** 最近一次会话的结论（反向思考锚点：同类问题连续追问时防止结论无故摇摆） */
     lastSession?: { taskContent: string; category: string; conclusion: string };
+    /** 用户冷启动偏好问卷摘要（兴趣/纠结点/决策风格/价值观），未填不传 */
+    preferenceText?: string;
   },
 ): LlmMessage[] {
   const categoryLabel = CATEGORY_LABEL[dto.category] ?? dto.category;
@@ -115,6 +120,11 @@ export function buildPrompt(
     taskLines.push('', '【用户长期记忆】', memoryText);
   }
 
+  // 冷启动偏好问卷：用户主动填写的兴趣/纠结点/决策风格/价值观，优先级高于长期记忆
+  if (extras?.preferenceText && extras.preferenceText.trim()) {
+    taskLines.push('', '【用户主动填写的偏好】', extras.preferenceText);
+  }
+
   // 第二步：把真实历史行为喂给模型，让建议个性化（不是 Memory/人格总结，仅当次上下文）
   if (historySummary && historySummary.trim()) {
     taskLines.push('', '【用户历史行为】', historySummary);
@@ -158,6 +168,9 @@ export function buildPrompt(
    长期记忆是基于历史行为的推断，不是绝对事实，不能因为单条记忆就武断给用户贴标签或预判结果。
    必须结合本次任务的意愿、精力、重要度、耗时，以及历史行为综合判断。
    例如记忆"面对长任务执行率低"，而本次是一个 30 分钟、高意愿、高精力的任务，就不应据此判定用户不会执行。
+12.1 如果用户消息中提供了【用户主动填写的偏好】，这是用户亲口说的兴趣、纠结点、决策风格和价值观，可信度高于长期记忆。
+   请把它作为个性化建议的重要依据：用户说容易纠结的事情，建议时多给清晰结论少给选项；用户看重的维度（如省钱、效率、体验），在劝说中重点呼应；
+   用户的兴趣可用来类比或降低行动门槛（如喜欢的事类比到不喜欢的事）。但同样要结合本次任务的真实数据，不能只凭偏好就下结论。
 13. 如果用户消息中提供了【今日天气】与天气打分，把它作为当下状态的轻量背景，不要喧宾夺主：
    打分低（≤4）说明天气正在拖累用户状态——温柔劝说模式下可先共情天气，再把最小行动改得更小或转为室内可做；
    打分高（≥8）说明天气宜人，可借势轻推一把；雨天/高温/大风等恶劣天气下，户外类任务应在结论或劝说中如实提示天气成本。

@@ -238,6 +238,9 @@ const categoryLabel: Record<string, string> = {
   shopping: "购物",
   health: "健康",
   social: "社交",
+  finance: "财务理财",
+  relationship: "情感关系",
+  family: "家庭",
   other: "其他",
 };
 </script>
@@ -269,9 +272,6 @@ const categoryLabel: Record<string, string> = {
       <div class="mb-8 flex items-center justify-between gap-4 sketch-border-b pb-3">
         <DualTextBlock cn="结果" en="RESULT" size="md" weight="normal" />
         <div class="flex items-center gap-5 shrink-0">
-          <span class="text-xs text-sketch-lineSub font-en tracking-widest">
-            SESSION #{{ session.sessionId }}<template v-if="createdAt"> · {{ formatDate(createdAt) }}</template>
-          </span>
           <span
             role="button"
             aria-label="删除记录"
@@ -371,19 +371,11 @@ const categoryLabel: Record<string, string> = {
 
           <!-- 当时任务输入 -->
           <div v-if="task">
-            <DualTextBlock cn="当时任务输入" en="ORIGINAL TASK INPUT" size="sm" weight="normal" />
-            <div class="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm font-light">
+            <DualTextBlock cn="纠结内容" en="CONTENT" size="sm" weight="normal" />
+            <div class="mt-3 grid grid-cols-2 gap-4 text-sm font-light">
               <div>
                 <p class="text-[10px] text-sketch-lineSub font-en tracking-widest">CONTENT</p>
                 <p class="mt-1">{{ task.taskContent }}</p>
-              </div>
-              <div>
-                <p class="text-[10px] text-sketch-lineSub font-en tracking-widest">WILL / ENERGY / IMPORTANCE</p>
-                <p class="mt-1">{{ task.willScore }} / {{ task.energyScore }} / {{ task.importance }}</p>
-              </div>
-              <div>
-                <p class="text-[10px] text-sketch-lineSub font-en tracking-widest">EXPECT COST</p>
-                <p class="mt-1">{{ task.expectCostMin ? `${task.expectCostMin} min` : "—" }}</p>
               </div>
               <div>
                 <p class="text-[10px] text-sketch-lineSub font-en tracking-widest">CATEGORY / DEADLINE</p>

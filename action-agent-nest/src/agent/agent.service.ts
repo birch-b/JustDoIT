@@ -15,6 +15,7 @@ import { MemoryService } from '../memory/memory.service';
 import { BehaviorMemoryService } from '../memory/behavior-memory.service';
 import { LlmMemoryService } from '../memory/llm-memory.service';
 import { UserMemory } from '../memory/entities/user-memory.entity';
+import { User } from '../user/entities/user.entity';
 import { buildFeedbackReplyPrompt, LlmAdvice, type PersuadeMode } from './agent.prompt';
 
 // 劝说模式文案（规则 fallback 用），key 与前端 PersuadeMode 联合类型完全对齐
@@ -43,6 +44,8 @@ export class AgentService {
     private readonly memoryService: MemoryService,
     private readonly behaviorMemoryService: BehaviorMemoryService,
     private readonly llmMemoryService: LlmMemoryService,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
   ) {}
 
   /** 创建会话：取历史 → 保存任务 → 计算建议 → 神秘加成 → 保存会话 */
@@ -86,6 +89,9 @@ export class AgentService {
     // 2. 读取用户长期记忆（3.3），与历史摘要一起喂给 LLM；无记忆时为空串、不影响原流程
     const memoryText = await this.buildMemoryText(userId);
 
+    // 2.5 读取用户冷启动偏好问卷（用户主动填写的兴趣/纠结点/决策风格/价值观）
+    const preferenceText = await this.buildPreferenceText(userId);
+
     // 3. 神秘加成：塔罗牌先抽好（第三方失败时本地随机兜底），牌面注入主 prompt
     //    让主 LLM 出结论时顺带写解读，保证解读与结论方向一致，不会出现"建议去做但牌劝退"的矛盾
     let tarotCards: string[] | undefined;
@@ -116,6 +122,7 @@ export class AgentService {
             conclusion: lastSession.conclusion,
           }
         : undefined,
+      preferenceText,
     });
     const { agentSuggestIndex, conclusion, persuadeMode, persuadeText, minAction } = advice;
     // 解读只在勾选塔罗时有效，且必须是 LLM 真实返回的（规则兜底无解读）
@@ -354,6 +361,7 @@ export class AgentService {
       tarotCard?: string;
       answerBookText?: string;
       lastSession?: { taskContent: string; category: string; conclusion: string };
+      preferenceText?: string;
     },
   ) {
     const llm = await this.llmService.generateAdvice(dto, historySummary, memoryText, extras);
@@ -411,6 +419,25 @@ export class AgentService {
     return top.map((m) => `- ${m.content}`).join('\n');
   }
 
+  /** 读取用户冷启动偏好问卷，拼成可读的 Prompt 片段；未填写返回空串 */
+  private async buildPreferenceText(userId: number): Promise<string> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user || !user.preference) return '';
+    const p = user.preference as Record<string, unknown>;
+    const lines: string[] = [];
+    const interests = (p.interests as string[]) ?? [];
+    const agonizeOver = (p.agonizeOver as string[]) ?? [];
+    const decisionStyle = (p.decisionStyle as string) ?? '';
+    const values = (p.values as string[]) ?? [];
+    const customNote = (p.customNote as string) ?? '';
+    if (interests.length) lines.push(`感兴趣的事：${interests.join('、')}`);
+    if (agonizeOver.length) lines.push(`容易纠结的事：${agonizeOver.join('、')}`);
+    if (decisionStyle) lines.push(`决策风格：${decisionStyle}`);
+    if (values.length) lines.push(`看重的东西：${values.join('、')}`);
+    if (customNote?.trim()) lines.push(`补充说明：${customNote.trim()}`);
+    return lines.join('\n');
+  }
+
   /** 规则兜底：LLM 不可用时使用（保留原规则逻辑） */
   private computeAdviceByRule(dto: CreateSessionDto): LlmAdvice {
     const base = dto.willScore * 5 + dto.energyScore * 3 + dto.importance * 2;
@@ -456,6 +483,9 @@ export class AgentService {
       shopping: '购物',
       health: '健康',
       social: '社交',
+      finance: '财务理财',
+      relationship: '情感关系',
+      family: '家庭',
       other: '其他',
     };
     const categoryLabel = categoryLabelMap[currentCategory] ?? currentCategory;

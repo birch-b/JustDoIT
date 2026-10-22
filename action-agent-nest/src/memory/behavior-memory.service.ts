@@ -19,6 +19,9 @@ const CATEGORY_LABELS: Record<string, string> = {
   shopping: '购物',
   health: '健康',
   social: '社交',
+  finance: '财务理财',
+  relationship: '情感关系',
+  family: '家庭',
   other: '其他',
 };
 
@@ -52,16 +55,17 @@ const TEMPLATES: MemoryTemplate[] = [
     memoryType: 'behavior',
     pos: (l) => `${l}类任务你通常愿意接受建议`,
     neg: (l) => `${l}类任务你通常不愿意接受建议`,
-    kwPos: (l) => `${l}听劝`,
-    kwNeg: (l) => `${l}有主见`,
+    // 气泡限 3~5 字：四字分类（财务理财等）只取前两字做前缀
+    kwPos: (l) => `${l.slice(0, 2)}听劝`,
+    kwNeg: (l) => `${l.slice(0, 2)}有主见`,
   },
   {
     // 接受后是否真正执行
     memoryType: 'pattern',
     pos: (l) => `${l}类任务接受建议后通常能真正执行`,
     neg: (l) => `${l}类任务容易“接受建议却没真正执行”`,
-    kwPos: (l) => `${l}行动派`,
-    kwNeg: (l) => `${l}难落地`,
+    kwPos: (l) => `${l.slice(0, 2)}行动派`,
+    kwNeg: (l) => `${l.slice(0, 2)}难落地`,
   },
 ];
 

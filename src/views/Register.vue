@@ -12,6 +12,7 @@ import SketchCheckbox from "@/components/sketch/SketchCheckbox.vue";
 import DecorDotCluster from "@/components/sketch/DecorDotCluster.vue";
 import EmailCodeInput from "@/components/sketch/EmailCodeInput.vue";
 import { openGuide } from "@/components/onboarding/OnboardingGuide.vue";
+import { pendingAfterGuide } from "@/components/onboarding/PreferenceQuestionnaire.vue";
 
 const router = useRouter();
 const route = useRoute();
@@ -88,6 +89,8 @@ async function submit() {
     return;
   }
   // 仅在注册成功这一刻弹新手引导：老用户与日常进入不再被打扰，忘记用法点导航栏「?」重看
+  // 同时打标记：引导关闭后由 App.vue 自动弹偏好问卷（注册成功立刻跳首页，本组件马上卸载，不能在本组件内 watch）
+  pendingAfterGuide.value = true;
   openGuide();
   router.push(redirect.value);
 }

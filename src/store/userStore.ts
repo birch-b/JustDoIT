@@ -1,6 +1,6 @@
 // Pinia 用户仓库：对接后端注册/登录，管理 JWT token 与当前用户
 import { defineStore } from "pinia";
-import { userApi, type AuthRes } from "@/api/userApi";
+import { userApi, type AuthRes, type UserPreference } from "@/api/userApi";
 import { useAgentStore } from "@/store/agentStore";
 import { useTodoStore } from "@/store/todoStore";
 
@@ -9,6 +9,8 @@ export interface UserInfo {
   username: string;
   email: string;
   bio?: string;        // 后端 user.bio，空串代表未设置（展示时由页面给占位文案）
+  preference?: UserPreference | null; // 冷启动偏好问卷，未填为 null
+  role?: string;       // user / admin
   createdAt?: string | null; // 后端注册时间 ISO 串
 }
 
@@ -109,6 +111,8 @@ export const useUserStore = defineStore("user", {
         username: res.user.username,
         email: res.user.email,
         bio: res.user.bio ?? "",
+        preference: res.user.preference ?? null,
+        role: res.user.role ?? "user",
         createdAt: res.user.createdAt ?? null,
       };
       this.token = res.token;
@@ -175,10 +179,27 @@ export const useUserStore = defineStore("user", {
           ...this.currentUser,
           ...res.user,
           bio: res.user.bio ?? "",
+          preference: res.user.preference ?? null,
           createdAt: res.user.createdAt ?? null,
         };
         this.persistAuth();
         return { ok: true, msg: "资料已更新" };
+      } catch (e) {
+        return { ok: false, msg: (e as Error).message };
+      }
+    },
+
+    /** 更新用户偏好问卷：PATCH /api/user/preference，成功后同步本地 */
+    async updatePreference(preference: UserPreference): Promise<{ ok: boolean; msg: string }> {
+      if (!this.currentUser) return { ok: false, msg: "未登录" };
+      try {
+        const res = await userApi.updatePreference(preference);
+        this.currentUser = {
+          ...this.currentUser,
+          preference: res.user.preference ?? null,
+        };
+        this.persistAuth();
+        return { ok: true, msg: "偏好已保存" };
       } catch (e) {
         return { ok: false, msg: (e as Error).message };
       }

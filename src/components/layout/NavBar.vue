@@ -2,10 +2,11 @@
 // 顶部导航栏
 // - >= 1024px (lg)：横向展开，默认打开
 // - < 1024px：点击汉堡按钮后改为竖向下拉面板，默认收起
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref, computed } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { useUserStore } from "@/store/userStore";
 import { useAgentStore } from "@/store/agentStore";
+import NoticeBell from "@/components/layout/NoticeBell.vue";
 
 const NARROW_BREAKPOINT = 1024; // 小于此宽度时，展开菜单改为竖向下拉
 const route = useRoute();
@@ -47,9 +48,13 @@ const links = [
   { to: "/keywords", cn: "关键词", en: "Keywords" },
 ];
 
-const authLinks = [
-  { to: "/profile", cn: "个人中心", en: "Profile" },
-];
+const authLinks = computed(() => {
+  const list = [{ to: "/profile", cn: "个人中心", en: "Profile" }];
+  if (userStore.currentUser?.role === "admin") {
+    list.push({ to: "/admin", cn: "管理", en: "Admin" });
+  }
+  return list;
+});
 function toggle() {
   expanded.value = !expanded.value;
 }
@@ -159,6 +164,9 @@ function logout() {
               </div>
             </div>
           </div>
+
+          <!-- 小铃铛：公告 + 意见反馈（仅登录后可见） -->
+          <NoticeBell v-if="userStore.isLoggedIn" class="mr-1" />
 
           <!-- 展开/收起按钮 -->
           <button

@@ -64,6 +64,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: "个人中心 | Profile", requiresAuth: true },
   },
   {
+    path: "/admin",
+    name: "admin",
+    component: () => import("@/views/Admin.vue"),
+    meta: { title: "后台管理 | Admin", requiresAuth: true, requiresAdmin: true },
+  },
+  {
     // 兜底路由：未匹配任何地址时显示 404 页
     path: "/:pathMatch(.*)*",
     name: "not-found",
@@ -89,6 +95,10 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && !loggedIn) {
     // 未登录/登录过期：带 redirect 回跳地址跳登录页，登录后原路返回
     return { name: "login", query: { redirect: to.fullPath } };
+  }
+  // 管理员页面：非 admin 角色跳回首页
+  if (to.meta.requiresAdmin && userStore.currentUser?.role !== "admin") {
+    return { name: "dashboard" };
   }
   // 已登录用户访问登录/注册/找回密码页，跳转到个人中心
   if (

@@ -80,7 +80,7 @@ function submit() {
                   我：{{ result.comment || "（这次没写评价）" }}
                 </p>
                 <p class="text-sm font-light leading-relaxed text-sketch-line">
-                  Agent：{{ result.reply }}
+                  它：{{ result.reply }}
                 </p>
               </div>
               <div class="mt-5 flex justify-end">

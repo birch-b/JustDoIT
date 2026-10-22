@@ -6,6 +6,7 @@ import { SendCodeDto } from './dto/send-code.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdatePreferenceDto } from './dto/update-preference.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { GetUser } from '../common/decorators/get-user.decorator';
 //暴露接口
@@ -62,5 +63,15 @@ export class UserController {
     @Body() dto: UpdateProfileDto,
   ) {
     return this.userService.updateProfile(userId, dto);
+  }
+
+  /** 更新用户偏好问卷 PATCH /api/user/preference（需登录；整体覆盖 preference JSON） */
+  @UseGuards(JwtAuthGuard)
+  @Patch('preference')
+  async updatePreference(
+    @GetUser('userId') userId: number,
+    @Body() dto: UpdatePreferenceDto,
+  ) {
+    return this.userService.updatePreference(userId, dto);
   }
 }

@@ -63,6 +63,9 @@ const categoryLabel: Record<string, string> = {
   shopping: "购物",
   health: "健康",
   social: "社交",
+  finance: "财务理财",
+  relationship: "情感关系",
+  family: "家庭",
   other: "其他",
 };
 
@@ -81,7 +84,10 @@ const cards = computed(() => store.cardList);
 
 // 历史会话按分类分组成"抽屉"：每组可折叠，像文件夹收纳文件
 // 固定分类顺序，只渲染有会话的组；默认展开最新会话所在的组
-const CATEGORY_ORDER = ["work", "study", "life", "shopping", "health", "social", "other"];
+const CATEGORY_ORDER = [
+  "work", "study", "life", "shopping", "health", "social",
+  "finance", "relationship", "family", "other",
+];
 const historyDrawers = useHoverPinDrawerGroup();
 const groupedCards = computed(() => {
   const map = new Map<string, typeof cards.value>();
