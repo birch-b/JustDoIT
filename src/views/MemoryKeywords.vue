@@ -7,7 +7,9 @@ import {
   createMemory,
   updateMemory,
   deleteMemory,
+  getSelfInsight,
   MEMORY_TYPE_LABEL,
+  type SelfInsight,
   type UserMemoryItem,
 } from "@/api/memoryApi";
 import { useUserStore } from "@/store/userStore";
@@ -73,6 +75,78 @@ const userStore = useUserStore();
 
 function editPreference() {
   openQuestionnaire(userStore.currentUser?.preference ?? null);
+}
+
+// ── 卡片切换：第 1 页关键词 / 第 2 页阶段总结 ──
+type PageKey = "keywords" | "insight";
+const pageOrder: PageKey[] = ["keywords", "insight"];
+const tabs: { key: PageKey; label: string }[] = [
+  { key: "keywords", label: "关键词" },
+  { key: "insight", label: "探索手册" },
+];
+const page = ref<PageKey>("keywords");
+const slideDir = ref<"left" | "right">("left");
+
+function switchPage(p: PageKey) {
+  if (p === page.value) return;
+  slideDir.value = pageOrder.indexOf(p) > pageOrder.indexOf(page.value) ? "left" : "right";
+  page.value = p;
+  if (p === "insight" && !insightLoaded.value) void loadInsight();
+}
+
+// 移动端触摸滑动切换（横向滑动超过阈值换页）
+let touchStartX = 0;
+function onTouchStart(e: TouchEvent) {
+  touchStartX = e.touches[0].clientX;
+}
+function onTouchEnd(e: TouchEvent) {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  if (Math.abs(dx) < 48) return;
+  switchPage(dx < 0 ? "insight" : "keywords");
+}
+
+// ── 探索手册：进入第 2 页时才拉取；后端攒够 5 条新纠结才重写，平时直接给旧稿 ──
+const insight = ref<SelfInsight | null>(null);
+const insightMeta = ref<{
+  updatedAt: number | null;
+  nextUpdateAt: number | null;
+  samples: number;
+  minSamples: number;
+} | null>(null);
+const insightLoading = ref(false);
+const insightLoaded = ref(false);
+const insightError = ref("");
+
+/** 时间戳 → MM-DD */
+function mdText(ts: number | null | undefined): string {
+  if (!ts) return "";
+  const d = new Date(ts);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${mm}-${dd}`;
+}
+
+const insightUpdatedText = computed(() => mdText(insightMeta.value?.updatedAt));
+const insightNextText = computed(() => mdText(insightMeta.value?.nextUpdateAt));
+
+async function loadInsight(refresh = false) {
+  insightLoading.value = true;
+  insightError.value = "";
+  try {
+    const view = await getSelfInsight(refresh);
+    insight.value = view.insight;
+    insightMeta.value = {
+      updatedAt: view.updatedAt,
+      nextUpdateAt: view.nextUpdateAt,
+      samples: view.samples,
+      minSamples: view.minSamples,
+    };
+    insightLoaded.value = true;
+  } catch {
+    insightError.value = "手册加载失败，稍后再试";
+  } finally {
+    insightLoading.value = false;
+  }
 }
 
 // 去重后的关键词气泡（全部展示，不按置信度区分颜色）
@@ -209,8 +283,7 @@ onMounted(load);
     <!-- 不加内边距：PageWrapper 已有 px-4 py-10 md:px-6，避免双重缩进 -->
     <div class="mx-auto max-w-5xl">
       <header class="mb-8 md:mb-12">
-        <h1 class="text-3xl md:text-4xl font-light tracking-wide">关键词汇总</h1>
-        <p class="mt-1 text-sm md:text-base font-light text-sketch-lineSub font-en tracking-widest">MY KEYWORDS</p>
+        <h1 class="text-3xl md:text-4xl font-light tracking-wide">自我探索</h1>
       </header>
 
       <!-- 副标题说明 -->
@@ -227,6 +300,40 @@ onMounted(load);
         </LinearButton>
       </div>
 
+      <!-- 卡片切换头：关键词 / 阶段总结（移动端可左右滑动换页） -->
+      <div class="mb-8 flex items-center gap-8">
+        <button
+          v-for="t in tabs"
+          :key="t.key"
+          type="button"
+          class="relative pb-1.5 text-base font-light transition-colors"
+          :class="page === t.key ? 'text-sketch-line' : 'text-sketch-lineSub hover:text-sketch-line'"
+          @click="switchPage(t.key)"
+        >
+          {{ t.label }}
+          <svg
+            v-if="page === t.key"
+            class="absolute -bottom-0.5 left-0 h-[5px] w-full"
+            viewBox="0 0 100 5"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M1 3 Q 25 1, 50 3 T 99 2.5"
+              fill="none"
+              stroke="#7FA89F"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <!-- 双页滑动容器 -->
+      <div @touchstart.passive="onTouchStart" @touchend.passive="onTouchEnd">
+        <Transition :name="slideDir === 'left' ? 'card-left' : 'card-right'" mode="out-in">
+        <!-- 第 1 页：关键词 -->
+        <div v-if="page === 'keywords'" key="keywords">
       <!-- 关键词墨圈气泡区 -->
       <SketchBorder v-if="!loading && keywordBubbles.length" padding="3rem 3.5rem" class="max-w-2xl">
         <DualTextBlock cn="关于你的词" en="KEYWORDS" size="sm" weight="normal" />
@@ -326,7 +433,7 @@ onMounted(load);
       <!-- 记忆列表 -->
       <div class="mt-8 space-y-4">
         <div v-for="m in memories" :key="m.id">
-          <SketchBorder padding="0.875rem 1.5rem 0.875rem 2.75rem">
+          <SketchBorder padding="1.5rem 1.5rem 1.5rem 2.75rem">
             <!-- 编辑态 -->
             <template v-if="editingId === m.id">
               <div class="space-y-3">
@@ -416,6 +523,101 @@ onMounted(load);
 
       <!-- 加载中 -->
       <p v-if="loading" class="mt-6 text-sm text-sketch-lineSub">加载中…</p>
+        </div>
+
+        <!-- 第 2 页：探索手册（场景标题 + 有画面感的叙事，不罗列数据） -->
+        <div v-else key="insight">
+          <p class="mb-6 text-sm font-light leading-relaxed text-sketch-lineSub">
+            不是清单，也不是数据——是把你这些天的样子，讲成几个你认得出来的场景。
+          </p>
+
+          <!-- 行内错误条 + 重试 -->
+          <div v-if="insightError" class="mb-4 flex items-center gap-4">
+            <p class="text-sm text-sketch-accent">{{ insightError }}</p>
+            <LinearButton size="sm" :disabled="insightLoading" @click="loadInsight()">
+              重试
+            </LinearButton>
+          </div>
+
+          <p v-if="insightLoading" class="text-sm text-sketch-lineSub">正在翻看你的纠结记录…</p>
+
+          <template v-else-if="insight">
+            <SketchBorder padding="2.5rem 3rem" class="max-w-2xl">
+              <p class="mb-7 text-xs tracking-widest text-sketch-lineSub">你的探索手册</p>
+
+              <section v-for="(c, i) in insight.chapters" :key="i" :class="i > 0 ? 'mt-7' : ''">
+                <svg
+                  v-if="i > 0"
+                  class="mb-7 h-2 w-full"
+                  viewBox="0 0 300 8"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M2 5 Q 40 1.5, 80 4.5 T 160 4 T 240 5 T 298 3.5"
+                    fill="none"
+                    stroke="#634442"
+                    stroke-opacity="0.22"
+                    stroke-width="1.2"
+                    stroke-linecap="round"
+                  />
+                </svg>
+                <h2 class="text-lg md:text-xl font-light leading-relaxed text-sketch-line">
+                  {{ c.scene }}
+                </h2>
+                <p class="mt-3 text-sm font-light leading-loose text-sketch-line/90">
+                  {{ c.story }}
+                </p>
+              </section>
+
+              <div class="mt-8">
+                <svg
+                  class="mb-7 h-2 w-full"
+                  viewBox="0 0 300 8"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M2 5 Q 40 1.5, 80 4.5 T 160 4 T 240 5 T 298 3.5"
+                    fill="none"
+                    stroke="#634442"
+                    stroke-opacity="0.22"
+                    stroke-width="1.2"
+                    stroke-linecap="round"
+                  />
+                </svg>
+                <DualTextBlock cn="想对你说" size="sm" weight="normal" />
+                <p class="mt-3 text-sm font-light leading-loose text-sketch-line">
+                  {{ insight.advice }}
+                </p>
+              </div>
+
+              <p class="mt-8 text-base font-light leading-relaxed text-sketch-accent">
+                {{ insight.question }}
+              </p>
+            </SketchBorder>
+
+            <div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <LinearButton size="sm" :disabled="insightLoading" @click="loadInsight(true)">
+                重新生成
+              </LinearButton>
+              <span class="text-xs font-light text-sketch-lineSub">
+                上次更新 {{ insightUpdatedText }} · 每 7 天更新一次，下次 {{ insightNextText }}
+              </span>
+            </div>
+          </template>
+
+          <!-- 样本不足：还不够 5 次有反馈的纠结 -->
+          <SketchBorder v-else padding="2rem 3rem" class="max-w-2xl">
+            <p class="text-sm font-light text-sketch-lineSub leading-relaxed">
+              还写不出你的手册——再完成
+              {{ insightMeta ? Math.max(0, insightMeta.minSamples - insightMeta.samples) : 5 }}
+              次纠结并留下反馈，我就能把你常有的样子讲给你听。
+            </p>
+          </SketchBorder>
+        </div>
+        </Transition>
+      </div>
     </div>
 
     <!-- 删除确认弹窗 -->
@@ -448,5 +650,25 @@ onMounted(load);
 }
 @media (prefers-reduced-motion: reduce) {
   .kw-bubble { animation: none; }
+}
+
+/* 卡片换页滑动过渡：左滑新页从右进，右滑新页从左进 */
+.card-left-enter-active,
+.card-left-leave-active,
+.card-right-enter-active,
+.card-right-leave-active {
+  transition: transform 0.28s ease, opacity 0.28s ease;
+}
+.card-left-enter-from { transform: translateX(48px); opacity: 0; }
+.card-left-leave-to { transform: translateX(-48px); opacity: 0; }
+.card-right-enter-from { transform: translateX(-48px); opacity: 0; }
+.card-right-leave-to { transform: translateX(48px); opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .card-left-enter-active,
+  .card-left-leave-active,
+  .card-right-enter-active,
+  .card-right-leave-active {
+    transition: none;
+  }
 }
 </style>

@@ -269,9 +269,9 @@ const categoryLabel: Record<string, string> = {
 
     <div v-else-if="session" class="flex-1 flex flex-col">
       <!-- 顶部小标题 -->
-      <div class="mb-8 flex items-center justify-between gap-4 sketch-border-b pb-3">
-        <DualTextBlock cn="结果" en="RESULT" size="md" weight="normal" />
-        <div class="flex items-center gap-5 shrink-0">
+      <div class="mb-8 flex items-end justify-between gap-4 sketch-border-b pb-3">
+        <h1 class="text-3xl md:text-4xl font-light tracking-wide">结果</h1>
+        <div class="flex items-center gap-5 shrink-0 pb-1">
           <span
             role="button"
             aria-label="删除记录"
@@ -310,8 +310,8 @@ const categoryLabel: Record<string, string> = {
             </div>
             <div class="mt-4 flex items-center justify-center gap-2">
               <SketchCheckbox :size="16" decorative />
-              <span class="text-xs font-en tracking-widest text-sketch-lineSub">
-                ACTION INDEX · {{ session.agentSuggestIndex }}
+              <span class="text-xs tracking-widest text-sketch-lineSub">
+                行动指数 · {{ session.agentSuggestIndex }}
               </span>
             </div>
           </div>
@@ -330,7 +330,7 @@ const categoryLabel: Record<string, string> = {
             <div class="mt-4 flex items-center gap-3">
               <SketchCheckbox :size="18" decorative />
               <span class="text-xs font-en tracking-widest text-sketch-lineSub">
-                {{ session.persuadeMode.toUpperCase() }}
+                {{ session.persuadeMode }}
               </span>
             </div>
             <p class="mt-4 text-sm font-light leading-relaxed">
@@ -371,15 +371,15 @@ const categoryLabel: Record<string, string> = {
 
           <!-- 当时任务输入 -->
           <div v-if="task">
-            <DualTextBlock cn="纠结内容" en="CONTENT" size="sm" weight="normal" />
-            <div class="mt-3 grid grid-cols-2 gap-4 text-sm font-light">
+            <div class="grid grid-cols-2 gap-4">
               <div>
-                <p>{{ task.taskContent }}</p>
+                <DualTextBlock cn="纠结内容" size="sm" weight="normal" />
+                <p class="mt-3 text-sm font-light">{{ task.taskContent }}</p>
               </div>
               <div>
-                <p class="text-[10px] text-sketch-lineSub font-en tracking-widest">CATEGORY / DEADLINE</p>
-                <p class="mt-1">
-                  {{ categoryLabel[task.category] || task.category }}<template v-if="task.deadline"> · {{ task.deadline }}</template>
+                <DualTextBlock cn="分类 / 截止时间" size="sm" weight="normal" />
+                <p class="mt-3 text-sm font-light">
+                  {{ categoryLabel[task.category] || task.category }}<template v-if="task.deadline"> · {{ task.deadline.replace("T", " ") }}</template>
                 </p>
               </div>
             </div>

@@ -59,7 +59,7 @@ const hintText = computed(() =>
             JUST DO IT
           </p>
           <div class="mt-12">
-            <SketchThinkingDots label="正在准备你的内容" sub-label="LOADING" />
+            <SketchThinkingDots label="正在准备你的内容" />
           </div>
         </div>
 

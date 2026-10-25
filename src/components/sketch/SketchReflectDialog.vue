@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // 完成打卡弹窗：勾选完成时先收集可选感受，提交后由 Agent 生成回应
-import { ref, watch, onBeforeUnmount } from "vue";
+// 打卡成功（result 出现）时在卡片范围内放 10 秒五彩纸屑，颜色取全站色调
+import { ref, watch, onBeforeUnmount, nextTick } from "vue";
+import confetti from "canvas-confetti";
 import SketchBorder from "@/components/sketch/SketchBorder.vue";
 import DualTextBlock from "@/components/sketch/DualTextBlock.vue";
 import LinearButton from "@/components/sketch/LinearButton.vue";
@@ -33,6 +35,70 @@ watch(
   },
 );
 
+// 五彩纸屑：仅覆盖卡片范围（canvas 绝对定位在卡片内），薄荷/炭棕/奶米系配色，约 10 秒
+const confettiCanvas = ref<HTMLCanvasElement | null>(null);
+let confettiInstance: confetti.CreateTypes | null = null;
+let confettiTimer: ReturnType<typeof setInterval> | null = null;
+let confettiStopTimer: ReturnType<typeof setTimeout> | null = null;
+const CONFETTI_COLORS = ["#A9C8C2", "#A9C8C2", "#7FA89F", "#7FA89F", "#634442", "#E8D5B7"];
+const CONFETTI_SHAPES: confetti.Shape[] = ["circle", "circle", "square"];
+const reducedMotion =
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function stopConfetti() {
+  if (confettiTimer) {
+    clearInterval(confettiTimer);
+    confettiTimer = null;
+  }
+  if (confettiStopTimer) {
+    clearTimeout(confettiStopTimer);
+    confettiStopTimer = null;
+  }
+  confettiInstance?.reset();
+}
+
+async function startConfetti() {
+  if (reducedMotion) return;
+  await nextTick();
+  const canvas = confettiCanvas.value;
+  if (!canvas) return;
+  stopConfetti();
+  confettiInstance = confetti.create(canvas, { resize: true, useWorker: false });
+  const base = { colors: CONFETTI_COLORS, shapes: CONFETTI_SHAPES, disableForReducedMotion: true };
+  // 开场从卡片底部中央炸开一团
+  confettiInstance({
+    ...base,
+    particleCount: 80,
+    spread: 100,
+    startVelocity: 32,
+    origin: { x: 0.5, y: 0.9 },
+  });
+  // 之后两侧交替小束喷 10 秒
+  let side = 0;
+  confettiTimer = setInterval(() => {
+    if (!confettiInstance) return;
+    side += 1;
+    confettiInstance({
+      ...base,
+      particleCount: 12,
+      angle: side % 2 === 0 ? 60 : 120,
+      spread: 60,
+      startVelocity: 28,
+      origin: { x: side % 2 === 0 ? 0 : 1, y: 0.85 },
+    });
+  }, 280);
+  confettiStopTimer = setTimeout(stopConfetti, 10_000);
+}
+
+watch(
+  () => props.result,
+  (v) => {
+    if (v && props.open) void startConfetti();
+    else stopConfetti();
+  },
+);
+
 function onKey(e: KeyboardEvent) {
   if (e.key !== "Escape" || !props.open || props.loading) return;
   if (props.result) emit("close");
@@ -42,10 +108,16 @@ watch(
   () => props.open,
   (v) => {
     if (v) window.addEventListener("keydown", onKey);
-    else window.removeEventListener("keydown", onKey);
+    else {
+      window.removeEventListener("keydown", onKey);
+      stopConfetti();
+    }
   },
 );
-onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onKey);
+  stopConfetti();
+});
 
 function submit() {
   if (props.loading) return;
@@ -68,7 +140,12 @@ function submit() {
           class="absolute inset-0 bg-sketch-line/35"
           @click="loading ? undefined : result ? emit('close') : emit('cancel')"
         />
-        <div class="reflect-card relative w-full max-w-sm">
+        <div class="reflect-card relative w-full max-w-sm overflow-hidden">
+          <canvas
+            ref="confettiCanvas"
+            class="pointer-events-none absolute inset-0 z-10 h-full w-full"
+            aria-hidden="true"
+          />
           <SketchBorder padding="1.75rem">
             <template v-if="result">
               <DualTextBlock cn="完成打卡" en="DONE. NICE." size="sm" weight="normal" />

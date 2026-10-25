@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 任务填写页 /task-create：任务表单录入（意愿、精力、任务参数）
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useAgentStore } from "@/store/agentStore";
 import { agentApi } from "@/api/agentApi";
@@ -44,6 +44,64 @@ const form = reactive<TaskCreateReq>({
 
 const submitting = ref(false);
 const errorMsg = ref("");
+
+// ── 二选一纠结：A/B 两个选项 + 当前倾向滑块，提交时拼进补充条件 ──
+const isBinary = ref(false);
+const optionA = ref("");
+const optionB = ref("");
+/** 1=完全选 A，10=完全选 B，5/6=拿不定 */
+const binaryLean = ref(5);
+
+const leanLabel = computed(() => {
+  const v = binaryLean.value;
+  if (v <= 2) return "几乎确定选 A";
+  if (v <= 4) return "有点偏向 A";
+  if (v <= 6) return "拿不定";
+  if (v <= 8) return "有点偏向 B";
+  return "几乎确定选 B";
+});
+
+/** 用户手动改过选项后不再自动覆盖 */
+const binaryTouched = ref(false);
+
+/**
+ * 从纠结内容里本地识别二选一（不调大模型）：
+ * 找"还是 / 或者 / 或"（排除"或许"）切开成 A/B，去掉句首疑问前缀与句尾语气词。
+ */
+function parseBinaryOptions(text: string): [string, string] | null {
+  const m = text.trim().match(/(.+?)(还是|或者|或(?!许))(.+)/);
+  if (!m) return null;
+  const a = m[1]
+    .replace(/^(我|咱)?(该不该|要不要|应不应该|是该|该|是|想不想)/, "")
+    .replace(/^[\s，,。.]+|[\s，,。.]+$/g, "");
+  const b = m[3].replace(/^[\s，,]+|[？?。！!吗呢吧~]+$/g, "");
+  if (!a || !b) return null;
+  return [a.slice(0, 50), b.slice(0, 50)];
+}
+
+/** 自动填充选项：只在用户没手动改过时才覆盖 */
+function autofillBinary() {
+  if (binaryTouched.value) return;
+  const r = parseBinaryOptions(form.taskContent);
+  if (r) {
+    optionA.value = r[0];
+    optionB.value = r[1];
+  }
+}
+
+// 勾选二选一时立刻识别一次；之后改纠结内容会跟着重识别，直到用户手动改选项
+watch(isBinary, (on) => {
+  if (on) {
+    binaryTouched.value = false;
+    autofillBinary();
+  }
+});
+watch(
+  () => form.taskContent,
+  () => {
+    if (isBinary.value) autofillBinary();
+  },
+);
 
 // 「思考中」动画节奏：接口返回太快时至少展示 1.6s；返回慢时答案出来后再停留 0.8s，
 // 避免加载动画一闪而过、用户感知不到
@@ -259,15 +317,28 @@ async function submit() {
     errorMsg.value = "请填写任务内容 / Please enter task content";
     return;
   }
+  if (isBinary.value && (!optionA.value.trim() || !optionB.value.trim())) {
+    errorMsg.value = "二选一需要把 A、B 两个选项都填上";
+    return;
+  }
   submitting.value = true;
   const startedAt = Date.now();
   try {
     // 创建会话：后端计算行动指数/劝说模式，并生成答案之书与塔罗牌
     // 补充条件未填写时传空字符串，后端视为无补充
     // 非购物分类不传钱包字段，避免误落库
+    // 二选一：选项与倾向拼进补充条件，让结论明确落到 A 或 B
+    let extraText = form.extraContext?.trim() ?? "";
+    if (isBinary.value) {
+      const binaryText =
+        `这是二选一纠结：选项A「${optionA.value.trim()}」，选项B「${optionB.value.trim()}」。` +
+        `我当前的倾向：${leanLabel.value}（${binaryLean.value}/10，1=完全选A，10=完全选B）。` +
+        `请明确告诉我选A还是选B，不要两个都推荐。`;
+      extraText = extraText ? `${binaryText}\n补充：${extraText}` : binaryText;
+    }
     const payload: TaskCreateReq = {
       ...form,
-      extraContext: form.extraContext?.trim() ?? "",
+      extraContext: extraText,
       itemPrice: form.category === "shopping" ? form.itemPrice ?? null : null,
       walletBalance: form.category === "shopping" ? form.walletBalance ?? null : null,
       walletScore: form.category === "shopping" ? form.walletScore ?? null : null,
@@ -306,11 +377,15 @@ function reset() {
   weatherInfo.value = null;
   weatherError.value = "";
   errorMsg.value = "";
+  isBinary.value = false;
+  optionA.value = "";
+  optionB.value = "";
+  binaryLean.value = 5;
 }
 </script>
 
 <template>
-  <PageWrapper title="新的一次纠结" subtitle="CREATE A NEW DECISION">
+  <PageWrapper title="新的一次纠结">
     <!-- 散落装饰：波点簇 + 手绘方框 -->
     <DecorDotCluster
       :count="40"
@@ -342,7 +417,7 @@ function reset() {
           v-if="submitting"
           class="fixed inset-0 z-50 flex items-center justify-center bg-sketch-bg/95"
         >
-          <SketchThinkingDots label="正在思考中" sub-label="THINKING" />
+          <SketchThinkingDots label="正在思考中" />
         </div>
       </Transition>
     </Teleport>
@@ -378,6 +453,58 @@ function reset() {
                 >
                   {{ c.cn }}
                 </SketchChip>
+              </div>
+            </div>
+
+            <!-- 二选一：勾选后填 A/B 两个选项 + 当前倾向滑块，结论会明确落到某一个 -->
+            <div>
+              <label class="flex items-center gap-3 cursor-pointer select-none">
+                <SketchCheckbox v-model="isBinary" :size="22" />
+                <DualTextBlock cn="这是二选一（A 还是 B）" size="sm" weight="normal" />
+              </label>
+              <div v-if="isBinary" class="ml-8 mt-3 space-y-4 border border-sketch-line/30 px-5 py-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="text-xs text-sketch-lineSub">选项 A</label>
+                    <input
+                      v-model="optionA"
+                      maxlength="50"
+                      placeholder="例如：买"
+                      class="sketch-input mt-1 w-full"
+                      @input="binaryTouched = true"
+                    />
+                  </div>
+                  <div>
+                    <label class="text-xs text-sketch-lineSub">选项 B</label>
+                    <input
+                      v-model="optionB"
+                      maxlength="50"
+                      placeholder="例如：不买"
+                      class="sketch-input mt-1 w-full"
+                      @input="binaryTouched = true"
+                    />
+                  </div>
+                </div>
+                <p class="text-xs font-light text-sketch-lineSub">
+                  已按纠结内容里的「还是 / 或者」自动切分，不对就直接改
+                </p>
+                <div>
+                  <div class="flex items-baseline justify-between">
+                    <span class="text-xs text-sketch-lineSub">当前倾向</span>
+                    <span class="text-sm font-light">{{ leanLabel }}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    step="1"
+                    class="sketch-range mt-2"
+                    v-model.number="binaryLean"
+                  />
+                  <div class="flex justify-between text-[10px] text-sketch-lineSub tracking-widest">
+                    <span>选 A</span><span>拿不定</span><span>选 B</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -432,7 +559,9 @@ function reset() {
                   <DualTextBlock cn="商品价格（元，可选）" en="ITEM PRICE" size="sm" weight="normal" />
                   <input
                     type="number"
-                    min="1"
+                    min="0"
+                    step="0.01"
+                    inputmode="decimal"
                     v-model.number="form.itemPrice"
                     class="sketch-input mt-2 w-full"
                   />
@@ -442,6 +571,8 @@ function reset() {
                   <input
                     type="number"
                     min="0"
+                    step="0.01"
+                    inputmode="decimal"
                     v-model.number="form.walletBalance"
                     class="sketch-input mt-2 w-full"
                   />

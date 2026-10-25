@@ -12,8 +12,6 @@ import { LlmService } from './llm.service';
 
 /** 无截止时间时的默认询问间隔：24h */
 const DEFAULT_CHECKIN_MS = 24 * 60 * 60 * 1000;
-/** 有截止时间时的最小询问间隔：1/3 时长但至少 10 分钟，避免刚创建就来问 */
-const MIN_CHECKIN_MS = 10 * 60 * 1000;
 /** 打卡回应的 LLM 失败兜底文案 */
 const CHECKIN_REPLY_FALLBACK = '记下了，又拍板又落地，这就很了不起。下次纠结，还来找大王聊。';
 
@@ -116,12 +114,11 @@ export class TodoService {
     return this.toRes(saved);
   }
 
-  /** 计算下次询问时间：有未来截止时间取时长的 1/3，否则 24h；下限 10 分钟 */
+  /** 计算下次询问时间：有未来截止时间就定在截止时刻，否则 24h */
   private nextCheckinDueAt(from: Date, deadline: string | null): Date {
     const dl = deadline ? new Date(deadline) : null;
     if (dl && !isNaN(dl.getTime()) && dl.getTime() > from.getTime()) {
-      const gap = dl.getTime() - from.getTime();
-      return new Date(from.getTime() + Math.max(gap / 3, MIN_CHECKIN_MS));
+      return dl;
     }
     return new Date(from.getTime() + DEFAULT_CHECKIN_MS);
   }

@@ -361,8 +361,8 @@ function goLogin() {
     <section class="mb-12">
       <div class="flex items-end justify-between mb-6 pb-3 sketch-border-b">
         <DualTextBlock cn="我的计划表" en="TO DO LIST" size="md" weight="normal" />
-        <span class="text-xs text-sketch-lineSub font-en tracking-widest">
-          {{ pendingCount }} PENDING · {{ doneCount }} DONE
+        <span class="text-xs text-sketch-lineSub tracking-widest">
+          {{ pendingCount }} 待完成 · {{ doneCount }} 已完成
         </span>
       </div>
 
@@ -522,8 +522,8 @@ function goLogin() {
         <DualTextBlock cn="历史会话" en="RECENT SESSIONS" size="md" weight="normal" />
         <!-- 普通模式：数量 + 批量管理入口 -->
         <div v-if="!selectMode" class="flex items-center gap-4">
-          <span class="text-xs text-sketch-lineSub font-en tracking-widest">
-            {{ cards.length }} ITEMS
+          <span class="text-xs text-sketch-lineSub tracking-widest">
+            {{ cards.length }} 条
           </span>
           <button
             v-if="isLoggedIn && !isEmpty && !sessionLoadFailed"
@@ -611,8 +611,8 @@ function goLogin() {
               ><SketchCaret :size="12" /></span>
               <span class="text-sm font-light">{{ g.label }}</span>
             </span>
-            <span class="text-xs text-sketch-lineSub font-en tracking-widest">
-              {{ g.list.length }} ITEMS
+            <span class="text-xs text-sketch-lineSub tracking-widest">
+              {{ g.list.length }} 条
             </span>
           </button>
 
@@ -657,8 +657,8 @@ function goLogin() {
               {{ card.conclusion }}
             </p>
 <div class="mt-4 flex items-start justify-between sketch-border-t pt-3 gap-2">
-  <span class="text-[10px] text-sketch-lineSub font-en tracking-widest">
-    {{ card.persuadeMode.toUpperCase() }}
+  <span class="text-[10px] text-sketch-lineSub tracking-widest">
+    {{ card.persuadeMode }}
   </span>
   <!-- 右侧垂直排列：时间在上，已反馈在下 -->
   <div class="flex flex-col items-end gap-1">

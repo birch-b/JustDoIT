@@ -12,6 +12,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { MemoryService } from './memory.service';
@@ -39,6 +40,16 @@ export class MemoryController {
   async summary(@GetUser('userId') userId: number): Promise<{ summary: string | null }> {
     const summary = await this.llmMemoryService.getOverallSummary(userId);
     return { summary };
+  }
+
+  // 关键词页"探索手册"：chapters/advice/question 三段式复盘；同时返回更新节奏信息
+  // 攒够 5 条新的「有反馈的纠结」才会重写，refresh=1 才强制重写（10 分钟节流）
+  @Get('insight')
+  async insight(
+    @GetUser('userId') userId: number,
+    @Query('refresh') refresh?: string,
+  ) {
+    return this.llmMemoryService.getSelfInsight(userId, refresh === '1');
   }
 
   @Post()

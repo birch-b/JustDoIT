@@ -4,6 +4,7 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   Max,
@@ -88,15 +89,15 @@ export class CreateSessionDto {
   @Max(10)
   weatherScore?: number | null;
 
-  /** 消费购物·商品价格（元，可选；与 walletBalance 配合计算占比） */
+  /** 消费购物·商品价格（元，可选，最多两位小数；与 walletBalance 配合计算占比） */
   @IsOptional()
-  @IsInt()
-  @Min(1)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
   itemPrice?: number | null;
 
-  /** 消费购物·钱包余额（元，可选；与 itemPrice 配合计算占比） */
+  /** 消费购物·钱包余额（元，可选，最多两位小数；与 itemPrice 配合计算占比） */
   @IsOptional()
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   walletBalance?: number | null;
 

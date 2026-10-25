@@ -285,7 +285,7 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
 </script>
 
 <template>
-  <PageWrapper full title="个人统计" subtitle="PERSONAL STATS">
+  <PageWrapper full title="个人统计">
     <!-- 散落装饰：波点簇 + 手绘方框 -->
     <DecorDotCluster :count="40" :spread="110" :safe-inset="50" :hollow-ratio="0.3" />
     <div
@@ -329,8 +329,8 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
             :style="{ animationDelay: `${t.delay}s` }"
           />
         </svg>
-        <p class="mt-1 text-[9px] text-sketch-lineSub font-en tracking-widest">
-          1 TICK = 5% · INKED = ACCEPTED
+        <p class="mt-1 text-[9px] text-sketch-lineSub tracking-widest">
+          1 格 = 5% · 涂色 = 已执行
         </p>
       </SketchBorder>
     </div>
@@ -390,7 +390,7 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
           <text
             x="238" y="258" text-anchor="middle" font-size="7.5" font-weight="600"
             :fill="FAINT" font-family="Inter, sans-serif" letter-spacing="0.12em"
-          >ONE TICK = ONE SESSION · DOT MARKS EVERY FIFTH</text>
+          >每格 = 一次会话 · 第 5 个标点</text>
         </svg>
       </SketchBorder>
 
@@ -508,8 +508,8 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
           ><SketchCaret :size="12" /></span>
           <DualTextBlock cn="归档记录" en="ARCHIVED" size="md" weight="normal" />
         </span>
-        <span class="text-xs text-sketch-lineSub font-en tracking-widest">
-          {{ todoStore.archivedList.length }} ITEMS
+        <span class="text-xs text-sketch-lineSub tracking-widest">
+          {{ todoStore.archivedList.length }} 条
         </span>
       </button>
 

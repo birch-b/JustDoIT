@@ -45,7 +45,7 @@ const links = [
   { to: "/", cn: "首页", en: "Home" },
   { to: "/task-create", cn: "新的纠结", en: "New" },
   { to: "/stats", cn: "统计", en: "Stats" },
-  { to: "/keywords", cn: "关键词", en: "Keywords" },
+  { to: "/keywords", cn: "自我探索", en: "Self" },
 ];
 
 const authLinks = computed(() => {
@@ -107,9 +107,6 @@ function logout() {
                 :class="route.path === l.to ? 'opacity-100' : 'opacity-60 hover:opacity-100'"
               >
                 <span class="text-base md:text-lg font-light">{{ l.cn }}</span>
-                <span class="text-[12px] font-light text-sketch-lineSub font-en tracking-widest">
-                  {{ l.en }}
-                </span>
                 <span
                   class="mt-1 h-px bg-sketch-accent transition-all duration-300"
                   :class="route.path === l.to ? 'w-6' : 'w-0 group-hover:w-4'"
@@ -125,9 +122,6 @@ function logout() {
                 :class="route.path === l.to ? 'opacity-100' : 'opacity-60 hover:opacity-100'"
               >
                 <span class="text-base md:text-lg font-light">{{ l.cn }}</span>
-                <span class="text-[12px] font-light text-sketch-lineSub font-en tracking-widest">
-                  {{ l.en }}
-                </span>
                 <span
                   class="mt-1 h-px bg-sketch-accent transition-all duration-300"
                   :class="route.path === l.to ? 'w-6' : 'w-0 group-hover:w-4'"
@@ -153,9 +147,6 @@ function logout() {
                   :class="route.path === '/login' ? 'opacity-100' : ''"
                 >
                   <span class="text-base md:text-lg font-light">登录</span>
-                  <span class="text-[12px] font-light text-sketch-lineSub font-en tracking-widest">
-                    Login
-                  </span>
                   <span
                     class="mt-1 h-px bg-sketch-accent transition-all duration-300"
                     :class="route.path === '/login' ? 'w-6' : 'w-0 group-hover:w-4'"
@@ -216,7 +207,6 @@ function logout() {
               @click="closeIfNarrow"
             >
               <span class="text-base font-light">{{ l.cn }}</span>
-              <span class="text-[11px] font-en tracking-widest opacity-60">{{ l.en }}</span>
             </RouterLink>
 
             <RouterLink
@@ -229,7 +219,6 @@ function logout() {
               @click="closeIfNarrow"
             >
               <span class="text-base font-light">{{ l.cn }}</span>
-              <span class="text-[11px] font-en tracking-widest opacity-60">{{ l.en }}</span>
             </RouterLink>
 
             <!-- 分隔线 -->
@@ -257,7 +246,6 @@ function logout() {
               @click="closeIfNarrow"
             >
               <span class="text-base font-light">登录</span>
-              <span class="text-[11px] font-en tracking-widest opacity-60">Login</span>
             </RouterLink>
           </div>
         </div>

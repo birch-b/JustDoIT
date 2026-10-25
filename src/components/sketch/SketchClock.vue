@@ -103,7 +103,7 @@ const scoreLabel = computed(() => Math.round(currentScore.value));
       font-size="11"
       font-family="Inter, sans-serif"
     >
-      ACTION INDEX
+      行动指数
     </text>
   </svg>
 </template>

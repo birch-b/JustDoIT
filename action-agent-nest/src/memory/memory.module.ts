@@ -11,12 +11,14 @@ import { LlmModule } from '../agent/llm.module';
 import { UserMemory } from './entities/user-memory.entity';
 import { TaskSession } from '../agent/entities/task-session.entity';
 import { ActionRecord } from '../agent/entities/action-record.entity';
+import { User } from '../user/entities/user.entity';
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     // 规则引擎需读取会话（拿 category）与行为反馈做聚合；同一实体可在多模块注册仓库
-    TypeOrmModule.forFeature([UserMemory, TaskSession, ActionRecord]),
+    // User：3.5 提炼时读取偏好问卷作为背景参照
+    TypeOrmModule.forFeature([UserMemory, TaskSession, ActionRecord, User]),
     // 3.5 记忆提炼复用共享 LlmService（避免与 AgentModule 循环依赖）
     LlmModule,
   ],

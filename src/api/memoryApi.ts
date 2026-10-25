@@ -36,6 +36,38 @@ export async function getMemorySummary(): Promise<string | null> {
   return data?.summary ?? null;
 }
 
+/** 探索手册的一章：场景标题 + 有画面感的叙事 */
+export interface SelfInsightChapter {
+  scene: string;
+  story: string;
+}
+
+/** 关键词页"探索手册"：阶段性复盘（场景叙事/一段开导/一句自问）；样本不足或 LLM 失败返回 null */
+export interface SelfInsight {
+  chapters: SelfInsightChapter[];
+  advice: string;
+  question: string;
+}
+
+/** 探索手册接口返回：成稿 + 更新节奏（nextUpdateAt 为下次自动更新时间） */
+export interface SelfInsightView {
+  insight: SelfInsight | null;
+  updatedAt: number | null;
+  samples: number;
+  nextUpdateAt: number | null;
+  intervalMs: number;
+  minSamples: number;
+}
+
+export async function getSelfInsight(
+  refresh = false,
+): Promise<SelfInsightView> {
+  const data = await authRequest<SelfInsightView>(
+    `/api/memory/insight${refresh ? "?refresh=1" : ""}`,
+  );
+  return data;
+}
+
 /** 新建一条记忆（关键词可选；置信度不暴露，后端缺省 0.5） */
 export function createMemory(payload: {
   memoryType: string;

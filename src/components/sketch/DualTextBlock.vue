@@ -29,11 +29,5 @@ withDefaults(defineProps<Props>(), {
     >
       {{ cn }}
     </p>
-    <p
-      v-if="en"
-      class="mt-1 text-xs font-light text-sketch-lineSub font-en tracking-wide break-words"
-    >
-      {{ en }}
-    </p>
   </div>
 </template>

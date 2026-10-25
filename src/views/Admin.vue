@@ -184,7 +184,7 @@ function tagClass(type: AnnouncementItem["type"]) {
 </script>
 
 <template>
-  <PageWrapper title="后台管理" subtitle="ADMIN">
+  <PageWrapper title="后台管理">
     <div class="mx-auto max-w-5xl">
       <!-- 加载 / 错误 -->
       <p v-if="loading" class="py-10 text-center text-sm font-light text-sketch-lineSub">加载中…</p>
@@ -198,22 +198,18 @@ function tagClass(type: AnnouncementItem["type"]) {
           <SketchBorder padding="1.25rem 1rem">
             <p class="text-center text-2xl md:text-3xl font-light">{{ overview?.totalUsers ?? 0 }}</p>
             <p class="mt-1 text-center text-xs font-light text-sketch-lineSub">用户总数</p>
-            <p class="text-center text-[10px] font-en tracking-widest text-sketch-lineSub/70">USERS</p>
           </SketchBorder>
           <SketchBorder padding="1.25rem 1rem">
             <p class="text-center text-2xl md:text-3xl font-light">{{ overview?.totalVisits ?? 0 }}</p>
             <p class="mt-1 text-center text-xs font-light text-sketch-lineSub">总访问量</p>
-            <p class="text-center text-[10px] font-en tracking-widest text-sketch-lineSub/70">VISITS</p>
           </SketchBorder>
           <SketchBorder padding="1.25rem 1rem">
             <p class="text-center text-2xl md:text-3xl font-light">{{ overview?.todayVisits ?? 0 }}</p>
             <p class="mt-1 text-center text-xs font-light text-sketch-lineSub">今日访问</p>
-            <p class="text-center text-[10px] font-en tracking-widest text-sketch-lineSub/70">TODAY</p>
           </SketchBorder>
           <SketchBorder padding="1.25rem 1rem">
             <p class="text-center text-2xl md:text-3xl font-light">{{ overview?.todayActiveUsers ?? 0 }}</p>
             <p class="mt-1 text-center text-xs font-light text-sketch-lineSub">今日活跃用户</p>
-            <p class="text-center text-[10px] font-en tracking-widest text-sketch-lineSub/70">ACTIVE</p>
           </SketchBorder>
         </section>
 

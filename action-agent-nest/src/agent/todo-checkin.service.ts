@@ -22,8 +22,8 @@ export class TodoCheckinService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    // 每 30 分钟跑一次（:07/:37，错开整点）；启动 20 秒后先补跑一轮，重启也能尽快发出
-    this.task = cron.schedule('7,37 * * * *', () => void this.scan());
+    // 每分钟扫描一次，保证到点后 1 分钟内发信；启动 20 秒后先补跑一轮，重启也能尽快发出
+    this.task = cron.schedule('* * * * *', () => void this.scan());
     const warmup = setTimeout(() => void this.scan(), 20_000);
     warmup.unref();
   }
@@ -40,6 +40,7 @@ export class TodoCheckinService implements OnModuleInit, OnModuleDestroy {
       const todos = await this.todoRepo.find({
         where: { done: false, archived: false, checkinDueAt: LessThanOrEqual(new Date()) },
       });
+      if (todos.length) this.logger.log(`扫描到期待办 ${todos.length} 条`);
       for (const todo of todos) {
         if (
           todo.lastCheckinAt &&
@@ -52,6 +53,7 @@ export class TodoCheckinService implements OnModuleInit, OnModuleDestroy {
         if (!user?.email) continue;
         try {
           await this.mail.sendCheckinMail(user.email, user.username, todo.taskContent);
+          this.logger.log(`提醒邮件已发送 todo#${todo.id}`);
         } catch (e) {
           this.logger.warn(`做了吗邮件发送失败 todo#${todo.id}: ${(e as Error).message}`);
         }

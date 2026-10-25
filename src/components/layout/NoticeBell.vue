@@ -38,22 +38,23 @@ const hasUnread = computed(() => {
 // ===== 下拉定位：跟随铃铛按钮，窗口尺寸/滚动时重算 =====
 const btnEl = ref<HTMLElement | null>(null);
 const panelEl = ref<HTMLElement | null>(null);
-const panelStyle = ref<Record<string, string>>({ top: "0px", right: "12px", width: "22rem" });
+const panelStyle = ref<Record<string, string>>({ top: "0px", left: "12px", width: "22rem" });
 
+// 所有屏幕统一：贴在铃铛右下方下拉，宽度随视口收缩，右侧永不溢出
 function updatePos() {
   const el = btnEl.value;
   if (!el) return;
+  const vw = document.documentElement.clientWidth;
+  const vh = window.innerHeight;
   const r = el.getBoundingClientRect();
-  const vw = window.innerWidth;
-  // 窄屏铺满（左右各留 12px），桌面保持 22rem 宽贴在铃铛下方
-  const width = vw < 640 ? vw - 24 : Math.min(22 * 16, vw - 24);
-  const right = Math.max(12, vw - r.right);
-  const top = r.bottom + 10;
+  const width = Math.min(22 * 16, vw - 24);
+  const left = Math.min(Math.max(r.right - width, 12), vw - 12 - width);
+  const top = Math.max(12, r.bottom + 10);
   panelStyle.value = {
     top: `${top}px`,
-    right: `${right}px`,
+    left: `${left}px`,
     width: `${width}px`,
-    maxHeight: `${Math.max(240, window.innerHeight - top - 16)}px`,
+    maxHeight: `${Math.max(180, vh - top - 12)}px`,
     background: "#F7F1E5",
     borderRadius: "18px",
     boxShadow: "4px 5px 0 rgba(99, 68, 66, 0.12)",
@@ -194,8 +195,7 @@ watch(tab, (v) => {
           ref="panelEl"
           class="fixed z-[80] flex flex-col overflow-hidden"
           :style="panelStyle"
-        >
-          <SketchBorder padding="1.25rem 1.5rem" class="flex min-h-0 flex-col">
+        >          <SketchBorder padding="1.25rem 1.5rem" class="flex min-h-0 flex-col">
             <div class="flex min-h-0 flex-1 flex-col">
               <!-- 标题行 + 关闭 -->
               <div class="flex shrink-0 items-center justify-between">
@@ -206,7 +206,6 @@ watch(tab, (v) => {
                     @click="tab = 'notice'"
                   >
                     公告
-                    <span class="ml-1 text-[10px] font-en tracking-widest opacity-60">NOTICE</span>
                     <span
                       class="mt-0.5 block h-px bg-sketch-accent transition-all duration-300"
                       :class="tab === 'notice' ? 'w-full' : 'w-0'"
@@ -218,7 +217,6 @@ watch(tab, (v) => {
                     @click="tab = 'feedback'"
                   >
                     意见反馈
-                    <span class="ml-1 text-[10px] font-en tracking-widest opacity-60">FEEDBACK</span>
                     <span
                       class="mt-0.5 block h-px bg-sketch-accent transition-all duration-300"
                       :class="tab === 'feedback' ? 'w-full' : 'w-0'"

@@ -134,7 +134,7 @@ function formatDate(iso: string): string {
 </script>
 
 <template>
-  <PageWrapper full title="个人中心" subtitle="PROFILE">
+  <PageWrapper full title="个人中心">
     <DecorDotCluster
       :count="40"
       :spread="110"
@@ -250,15 +250,15 @@ function formatDate(iso: string): string {
           <div class="mt-6 grid grid-cols-3 gap-4">
             <div class="text-center">
               <p class="text-3xl font-light font-en">{{ stats.totalSessions }}</p>
-              <p class="mt-1 text-[10px] text-sketch-lineSub font-en tracking-widest">SESSIONS</p>
+              <p class="mt-1 text-[10px] text-sketch-lineSub tracking-widest">会话数</p>
             </div>
             <div class="text-center">
               <p class="text-3xl font-light font-en">{{ stats.executedCount }}</p>
-              <p class="mt-1 text-[10px] text-sketch-lineSub font-en tracking-widest">EXECUTED</p>
+              <p class="mt-1 text-[10px] text-sketch-lineSub tracking-widest">已执行</p>
             </div>
             <div class="text-center">
               <p class="text-3xl font-light font-en">{{ stats.acceptRate }}<span class="text-lg">%</span></p>
-              <p class="mt-1 text-[10px] text-sketch-lineSub font-en tracking-widest">ACCEPT</p>
+              <p class="mt-1 text-[10px] text-sketch-lineSub tracking-widest">接受率</p>
             </div>
           </div>
         </SketchBorder>

@@ -19,9 +19,6 @@ function goHome() {
         <SketchBorder padding="2.5rem 2.75rem">
           <div class="flex flex-col items-center text-center">
             <p class="font-en text-5xl font-light tracking-[0.2em] text-sketch-line">404</p>
-            <p class="mt-3 text-xs font-light font-en tracking-widest text-sketch-lineSub">
-              PAGE NOT FOUND
-            </p>
             <p class="mt-5 text-sm font-light leading-relaxed text-sketch-line">
               你要找的页面不存在，可能已经被移走，或者地址写错了。
             </p>

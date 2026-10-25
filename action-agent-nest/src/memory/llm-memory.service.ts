@@ -5,14 +5,22 @@
 // - 样本下限 + prompt 严格约束防过度推断；输出经白名单校验后才入库，最多 3 条/次
 // - 只写 memoryKey 非空的行（按 key upsert），手动记忆与 3.4 受管记忆一律不动
 // - 任何失败只记日志，绝不影响主流程
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import Redis from 'ioredis';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { UserMemory } from './entities/user-memory.entity';
 import { TaskSession } from '../agent/entities/task-session.entity';
 import { ActionRecord } from '../agent/entities/action-record.entity';
+import { User } from '../user/entities/user.entity';
 import { LlmService } from '../agent/llm.service';
-import { buildInsightPrompt, buildMemorySummaryPrompt, LlmMemoryInsight } from './memory-insight.prompt';
+import { buildInsightPrompt, buildMemorySummaryPrompt, buildSelfInsightPrompt, LlmMemoryInsight, SelfInsightResult } from './memory-insight.prompt';
 import { MEMORY_TYPES } from './dto/create-memory.dto';
 
 /** 行为样本少于该数不调 LLM（证据不足，防过早下结论） */
@@ -63,6 +71,22 @@ function diceSimilarity(a: string, b: string): number {
 const SUMMARY_MAX_LEN = 200;
 /** 综合论述缓存有效期：统计页频繁打开也不重复调 LLM；记忆内容变化时哈希失效立即重算 */
 const SUMMARY_TTL_MS = 30 * 60 * 1000;
+/** 自我洞察：有反馈的会话不足该数时提示样本不够（比提炼门槛低，复盘重在安慰与方向） */
+const MIN_SAMPLES_FOR_INSIGHT = 5;
+/** 探索手册自动更新周期：每 7 天重写一次（平时直接给旧稿，不会因为新增一条纠结就重算） */
+const INSIGHT_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+/** 探索手册快照在 Redis 的保留时长（半年内没用过就自然过期重算） */
+const INSIGHT_SNAPSHOT_TTL_SECONDS = 180 * 24 * 60 * 60;
+/** 手动刷新自我洞察的节流间隔 */
+const INSIGHT_REFRESH_THROTTLE_MS = 10 * 60 * 1000;
+/** 探索手册：场景标题长度上限 */
+const INSIGHT_SCENE_MAX = 24;
+/** 探索手册：单章叙事长度上限 */
+const INSIGHT_STORY_MAX = 160;
+/** 探索手册：一段开导建议长度上限 */
+const INSIGHT_ADVICE_MAX = 120;
+/** 探索手册：一句自问长度上限 */
+const INSIGHT_QUESTION_MAX = 40;
 
 interface SummaryCacheEntry {
   hash: string;
@@ -70,13 +94,37 @@ interface SummaryCacheEntry {
   at: number;
 }
 
+/** 探索手册快照：成稿内容 + 成稿时间，用于判断是否到更新周期 */
+export interface InsightSnapshot {
+  data: SelfInsightResult;
+  at: number;
+}
+
+/** 探索手册接口返回：成稿 + 更新节奏信息（前端用来提示"下次什么时候更新"） */
+export interface SelfInsightView {
+  insight: SelfInsightResult | null;
+  updatedAt: number | null;
+  samples: number;
+  /** 下次自动更新时间点（毫秒）；无成稿时为 null */
+  nextUpdateAt: number | null;
+  /** 自动更新周期（毫秒） */
+  intervalMs: number;
+  /** 首次成稿需要的样本数 */
+  minSamples: number;
+}
+
 @Injectable()
-export class LlmMemoryService {
+export class LlmMemoryService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(LlmMemoryService.name);
   /** userId → 上次提炼时间戳 */
   private readonly lastRunAt = new Map<number, number>();
   /** userId → 综合论述缓存（内存级，重启即重置） */
   private readonly summaryCache = new Map<number, SummaryCacheEntry>();
+  /** 探索手册快照（Redis 持久化；Redis 不可用时退回内存，功能仍可用只是重启会重算） */
+  private redis: Redis | null = null;
+  private readonly insightFallback = new Map<number, InsightSnapshot>();
+  /** userId → 上次手动刷新自我洞察时间 */
+  private readonly insightRefreshAt = new Map<number, number>();
 
   constructor(
     @InjectRepository(UserMemory)
@@ -85,8 +133,93 @@ export class LlmMemoryService {
     private readonly sessionRepo: Repository<TaskSession>,
     @InjectRepository(ActionRecord)
     private readonly recordRepo: Repository<ActionRecord>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly llmService: LlmService,
+    private readonly configService: ConfigService,
   ) {}
+
+  /** 应用启动时连 Redis：连不上只降级为内存快照，不影响其余功能 */
+  async onModuleInit() {
+    const url =
+      this.configService.get<string>('redis.url') ?? 'redis://localhost:6379';
+    const client: Redis = new Redis(url, {
+      lazyConnect: true,
+      maxRetriesPerRequest: 2,
+      retryStrategy: (times) => Math.min(times * 200, 2000),
+    });
+    try {
+      await client.connect();
+      this.redis = client;
+    } catch (e) {
+      client.disconnect();
+      this.redis = null;
+      this.logger.warn(
+        `探索手册快照无法使用 Redis，改存内存（重启会重算）：${(e as Error).message}`,
+      );
+    }
+  }
+
+  async onModuleDestroy() {
+    await this.redis?.quit().catch(() => undefined);
+  }
+
+  /** 读取探索手册快照：Redis 优先，异常时回退内存 */
+  private async readInsightSnapshot(
+    userId: number,
+  ): Promise<InsightSnapshot | null> {
+    try {
+      const raw = await this.redis?.get(`insight:${userId}`);
+      if (!raw) return this.insightFallback.get(userId) ?? null;
+      const parsed = JSON.parse(raw) as InsightSnapshot;
+      return parsed?.data ? parsed : null;
+    } catch {
+      return this.insightFallback.get(userId) ?? null;
+    }
+  }
+
+  /** 写入探索手册快照：内存兜底 + Redis 持久化 */
+  private async writeInsightSnapshot(
+    userId: number,
+    snap: InsightSnapshot,
+  ): Promise<void> {
+    this.insightFallback.set(userId, snap);
+    try {
+      await this.redis?.set(
+        `insight:${userId}`,
+        JSON.stringify(snap),
+        'EX',
+        INSIGHT_SNAPSHOT_TTL_SECONDS,
+      );
+    } catch (e) {
+      this.logger.warn(`探索手册快照写入 Redis 失败：${(e as Error).message}`);
+    }
+  }
+
+  /** 聚合最近有反馈的行为流水（会话 + 反馈），供探索手册与洞察使用 */
+  private async collectBehaviorLines(
+    userId: number,
+    take: number,
+  ): Promise<string[]> {
+    const sessions = await this.sessionRepo.find({
+      relations: { task: true },
+      where: { task: { userId } },
+      order: { createdAt: 'DESC' },
+      take,
+    });
+    const records = sessions.length
+      ? await this.recordRepo.find({
+          where: { sessionId: In(sessions.map((s) => s.id)) },
+        })
+      : [];
+    const recMap = new Map(records.map((r) => [r.sessionId, r]));
+    return sessions
+      .map((s) => {
+        const rec = s.task ? recMap.get(s.id) : undefined;
+        return s.task && rec ? this.toBehaviorLine(s.task, rec) : null;
+      })
+      .filter((x): x is string => !!x);
+  }
 
   /**
    * 节流入口：行为反馈写入后调用。间隔内重复调用直接跳过；先占位再执行，防止并发重复提炼。
@@ -141,6 +274,117 @@ export class LlmMemoryService {
     return clipped;
   }
 
+  /**
+   * 关键词页"探索手册"：记忆 + 行为流水 + 偏好问卷 → 阶段性复盘（chapters/advice/question）。
+   * 更新节奏（避免每加一条纠结就重新分析）：
+   * - 从未生成过：样本够就生成一次
+   * - 已有快照：每 INSIGHT_REFRESH_INTERVAL_MS（7 天）自动重写一次，未到周期直接给旧稿
+   * - refresh=true：用户点「重新生成」强制重写，但 10 分钟内只算一次
+   * - 快照存 Redis（180 天），后端重启不会重算
+   */
+  async getSelfInsight(
+    userId: number,
+    refresh = false,
+  ): Promise<SelfInsightView> {
+    const behaviorLines = await this.collectBehaviorLines(userId, 20);
+    const samples = behaviorLines.length;
+    const snap = await this.readInsightSnapshot(userId);
+    const base = {
+      samples,
+      intervalMs: INSIGHT_REFRESH_INTERVAL_MS,
+      minSamples: MIN_SAMPLES_FOR_INSIGHT,
+    };
+
+    // 样本不足：有旧稿就先给旧稿，没有就返回引导
+    if (samples < MIN_SAMPLES_FOR_INSIGHT) {
+      return {
+        ...base,
+        insight: snap?.data ?? null,
+        updatedAt: snap?.at ?? null,
+        nextUpdateAt: snap ? snap.at + INSIGHT_REFRESH_INTERVAL_MS : null,
+      };
+    }
+
+    const now = Date.now();
+    const needGenerate =
+      refresh ||
+      !snap ||
+      now - snap.at >= INSIGHT_REFRESH_INTERVAL_MS;
+
+    if (!needGenerate && snap) {
+      return {
+        ...base,
+        insight: snap.data,
+        updatedAt: snap.at,
+        nextUpdateAt: snap.at + INSIGHT_REFRESH_INTERVAL_MS,
+      };
+    }
+
+    // 手动刷新节流：太频繁就直接给旧稿
+    if (refresh && snap) {
+      const lastRefresh = this.insightRefreshAt.get(userId) ?? 0;
+      if (now - lastRefresh < INSIGHT_REFRESH_THROTTLE_MS) {
+        return {
+          ...base,
+          insight: snap.data,
+          updatedAt: snap.at,
+          nextUpdateAt: snap.at + INSIGHT_REFRESH_INTERVAL_MS,
+        };
+      }
+      this.insightRefreshAt.set(userId, now);
+    }
+
+    const memories = await this.memoryRepo.find({ where: { userId } });
+    const preferenceText = await this.buildPreferenceText(userId);
+
+    const raw = await this.llmService.chatJson(
+      buildSelfInsightPrompt(memories, behaviorLines, preferenceText),
+      0.6,
+    );
+    const data = this.validateSelfInsight(raw);
+    // LLM 失败：保留旧稿，不打断页面
+    if (!data) {
+      return {
+        ...base,
+        insight: snap?.data ?? null,
+        updatedAt: snap?.at ?? null,
+        nextUpdateAt: snap ? snap.at + INSIGHT_REFRESH_INTERVAL_MS : null,
+      };
+    }
+
+    const at = Date.now();
+    await this.writeInsightSnapshot(userId, { data, at });
+    return {
+      ...base,
+      insight: data,
+      updatedAt: at,
+      nextUpdateAt: at + INSIGHT_REFRESH_INTERVAL_MS,
+    };
+  }
+
+  /** 校验探索手册输出：逐章丢弃不完整/超长内容，advice 与 question 必填 */
+  private validateSelfInsight(raw: Record<string, unknown> | null): SelfInsightResult | null {
+    if (!raw) return null;
+    const clip = (v: unknown, max: number) =>
+      typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '';
+    const chapters = Array.isArray(raw.chapters)
+      ? raw.chapters
+          .map((c) => {
+            const o = (c ?? {}) as Record<string, unknown>;
+            return {
+              scene: clip(o.scene, INSIGHT_SCENE_MAX),
+              story: clip(o.story, INSIGHT_STORY_MAX),
+            };
+          })
+          .filter((c) => c.scene && c.story)
+          .slice(0, 3)
+      : [];
+    const advice = clip(raw.advice, INSIGHT_ADVICE_MAX);
+    const question = clip(raw.question, INSIGHT_QUESTION_MAX);
+    if (!chapters.length || !advice || !question) return null;
+    return { chapters, advice, question };
+  }
+
   /** 提炼主流程：聚合行为 → 调 LLM → 校验 → 按 key upsert → 回收超限；返回入库条数与 LLM 原始条数 */
   async extractAndStore(userId: number): Promise<{
     stored: number;
@@ -170,12 +414,13 @@ export class LlmMemoryService {
       return { stored: 0, llmCount: 0, reason: 'insufficient_samples' };
     }
 
-    // 2. 已有记忆一并交给 LLM，prompt 要求主题相同时复用原 key
+    // 2. 已有记忆 + 偏好问卷一并交给 LLM，prompt 要求主题相同时复用原 key
     const existing = await this.memoryRepo.find({ where: { userId } });
+    const preferenceText = await this.buildPreferenceText(userId);
 
     // 3. 调 LLM 提炼（temperature 低一些，输出更稳定）；失败/解析失败返回 null
     const raw = await this.llmService.chatJson(
-      buildInsightPrompt(behaviorLines, existing),
+      buildInsightPrompt(behaviorLines, existing, preferenceText),
       0.2,
     );
     const insights = this.validateInsights(raw);
@@ -259,6 +504,25 @@ export class LlmMemoryService {
       line += ` | 留言:${comment.length > 60 ? `${comment.slice(0, 60)}…` : comment}`;
     }
     return line;
+  }
+
+  /** 读取用户冷启动偏好问卷，拼成可读片段（与 agent.service 同口径）；未填写返回空串 */
+  private async buildPreferenceText(userId: number): Promise<string> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user || !user.preference) return '';
+    const p = user.preference as Record<string, unknown>;
+    const lines: string[] = [];
+    const interests = (p.interests as string[]) ?? [];
+    const agonizeOver = (p.agonizeOver as string[]) ?? [];
+    const decisionStyle = (p.decisionStyle as string) ?? '';
+    const values = (p.values as string[]) ?? [];
+    const customNote = (p.customNote as string) ?? '';
+    if (interests.length) lines.push(`感兴趣的事：${interests.join('、')}`);
+    if (agonizeOver.length) lines.push(`容易纠结的事：${agonizeOver.join('、')}`);
+    if (decisionStyle) lines.push(`决策风格：${decisionStyle}`);
+    if (values.length) lines.push(`看重的东西：${values.join('、')}`);
+    if (customNote?.trim()) lines.push(`补充说明：${customNote.trim()}`);
+    return lines.join('\n');
   }
 
   /** 校验 LLM 输出：非法字段逐条丢弃，同 key 去重，最多保留 MAX_INSIGHTS_PER_RUN 条 */
