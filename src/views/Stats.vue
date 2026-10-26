@@ -349,7 +349,7 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
               :fill="row.hero ? HERO_DEEP : MUT"
               font-size="9.5"
               font-weight="600"
-              font-family="'Noto Sans SC', sans-serif"
+              font-family="'Noto Serif SC', serif"
             >{{ row.mode }}</text>
             <!-- 发丝基线 -->
             <line :x1="ROW_X0" :y1="row.y + 10" :x2="ROW_X1" :y2="row.y + 10" :stroke="GRID" stroke-width="0.7" />
@@ -384,12 +384,12 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
               font-size="12"
               font-weight="800"
               :fill="row.hero ? HERO_DEEP : INK"
-              font-family="Inter, sans-serif"
+              font-family="'Noto Serif SC', serif"
             >{{ row.count }}</text>
           </g>
           <text
             x="238" y="258" text-anchor="middle" font-size="7.5" font-weight="600"
-            :fill="FAINT" font-family="Inter, sans-serif" letter-spacing="0.12em"
+            :fill="FAINT" font-family="'Noto Serif SC', serif" letter-spacing="0.12em"
           >每格 = 一次会话 · 第 5 个标点</text>
         </svg>
       </SketchBorder>
@@ -435,14 +435,14 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
               <text
                 :x="BUB_X0 - 9" :y="t.y + 2.5" text-anchor="end"
                 :fill="t.k === 0 ? MUT : FAINT" font-size="7" font-weight="600"
-                font-family="Inter, sans-serif"
+                font-family="'Noto Serif SC', serif"
               >{{ t.k }}</text>
             </g>
             <!-- y 轴标题 -->
             <text
               :x="BUB_X0 - 26" :y="BUB_TOP - 6" text-anchor="middle"
               :fill="MUT" font-size="7.5" font-weight="600"
-              font-family="'Noto Sans SC', Inter, sans-serif"
+              font-family="'Noto Serif SC', serif"
             >次数</text>
 
             <!-- x 基线 + 列刻度 + 意愿分 1-10 -->
@@ -465,12 +465,12 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
               text-anchor="middle"
               :fill="c.long ? MUT : FAINT"
               font-size="7.5" font-weight="600"
-              font-family="Inter, sans-serif"
+              font-family="'Noto Serif SC', serif"
             >{{ c.w }}</text>
             <text
               :x="(BUB_X0 + BUB_X1) / 2" :y="BUB_BASE + 34" text-anchor="middle"
               :fill="MUT" font-size="8" font-weight="600"
-              font-family="'Noto Sans SC', Inter, sans-serif" letter-spacing="0.05em"
+              font-family="'Noto Serif SC', serif" letter-spacing="0.05em"
             >意愿分数 · 1 不想做 → 10 很想做</text>
 
             <!-- 决策气泡：首次完整入镜才渲染并弹入；willPlayKey 变化重建 <g> 实现重放 -->

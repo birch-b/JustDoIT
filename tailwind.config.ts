@@ -23,9 +23,9 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'Noto Sans SC', 'system-ui', 'sans-serif'],
-        sc: ['"Noto Sans SC"', 'sans-serif'],
-        en: ['Inter', 'sans-serif'],
+        sans: ['"Noto Serif SC"', 'Georgia', 'serif'],
+        sc: ['"Noto Serif SC"', 'serif'],
+        en: ['"Noto Serif SC"', 'Georgia', 'serif'],
       },
       // 整体字重再加粗一档：light 500 / normal 600 / medium 700
       fontWeight: {

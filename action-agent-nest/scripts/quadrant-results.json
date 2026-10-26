@@ -1,0 +1,692 @@
+{
+  "timestamp": "2026-10-26T09:40:18.726Z",
+  "model": "deepseek-chat",
+  "baseUrl": "https://api.deepseek.com",
+  "prompts": {
+    "A": {
+      "dto": {
+        "taskContent": "写完这周的工作周报并提交给主管",
+        "category": "work",
+        "willScore": 9,
+        "energyScore": 8,
+        "importance": 9,
+        "expectCostMin": 40,
+        "deadline": "今天 18:00",
+        "location": "在家/公司",
+        "extraContext": "本周素材都已经收集好，三个项目的进展记录整理在笔记里，只剩组织语言和调整格式"
+      },
+      "rationale": "意愿高、精力高、重要度高、有素材、临近截止——典型应该做也适合做的场景"
+    },
+    "B": {
+      "dto": {
+        "taskContent": "报名「AI 产品经理实战认证课程」",
+        "category": "study",
+        "willScore": 9,
+        "energyScore": 2,
+        "importance": 7,
+        "expectCostMin": 25,
+        "deadline": "本周日 23:00（报名截止）",
+        "location": "线上",
+        "extraContext": "课程是业界知名讲师主讲，内容覆盖需求分析/数据驱动/产品设计，是我长期想系统学习的方向，3个月后开课。但我现在凌晨3点才睡、还在低烧38.2度，下午14:00还有必须参加的季度部门述职会议，今天状态完全扛不住任何费脑的事",
+        "walletScore": 7,
+        "itemPrice": 1800,
+        "walletBalance": 8500
+      },
+      "rationale": "事本身非常值得（好讲师、好内容、长期想学），但当前身体状态极差、有紧急会议——目标是看模型能否给出高指数 + shouldGo=false"
+    },
+    "C": {
+      "dto": {
+        "taskContent": "现在去买一双限量发售的 AJ 球鞋",
+        "category": "shopping",
+        "willScore": 3,
+        "energyScore": 6,
+        "importance": 2,
+        "expectCostMin": 30,
+        "location": "线下门店",
+        "extraContext": "月薪到手6000，每月固定存500，运动鞋已有4双够用。这次是小红书刷到种草，觉得\"限量不买可惜\"，但冷静想想确实非必需",
+        "walletScore": 2,
+        "itemPrice": 1699,
+        "walletBalance": 885
+      },
+      "rationale": "非必需、占钱包大、自己意愿也不高、有替代——典型应该不做也不适合做的场景"
+    },
+    "D": {
+      "dto": {
+        "taskContent": "把购物车里那件 29 元的纯色短袖T恤买了",
+        "category": "shopping",
+        "willScore": 5,
+        "energyScore": 7,
+        "importance": 2,
+        "expectCostMin": 10,
+        "location": "手机下单",
+        "extraContext": "T恤本身价值一般、不是刚需、之前已经有3件类似的。但现在是618活动最后1小时，过了恢复原价59元；凑单还差11元才能包邮；我刚刷手机正好看到，有10分钟空闲；这件事做了可以快速消除一个购物车 pending，且机会窗口过了就没了",
+        "walletScore": 8,
+        "itemPrice": 29,
+        "walletBalance": 5200
+      },
+      "rationale": "事本身价值有限（非刚需、已有类似），但当前有明确的机会窗口和低成本行动理由——目标是看模型能否给出低指数 + shouldGo=true"
+    }
+  },
+  "results": [
+    {
+      "quadrant": "A",
+      "sceneName": "合理 + 适合行动（基线）",
+      "runIndex": 1,
+      "success": true,
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，趁素材齐状态好尽快提交",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "意愿9、精力8、重要度9，素材已齐只剩组织语言，40分钟成本很低，拖到18点前反而仓促。现在动手性价比最高。",
+        "minAction": "打开笔记，先把三个项目的要点各写一行"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，趁素材齐状态好尽快提交",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "意愿9、精力8、重要度9，素材已齐只剩组织语言，40分钟成本很低，拖到18点前反而仓促。现在动手性价比最高。",
+        "minAction": "打开笔记，先把三个项目的要点各写一行"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，趁素材齐状态好尽快提交",
+        "minAction": "打开笔记，先把三个项目的要点各写一行",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "HIGH_IDX_TRUE"
+    },
+    {
+      "quadrant": "A",
+      "sceneName": "合理 + 适合行动（基线）",
+      "runIndex": 2,
+      "success": true,
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，现在就开始写周报",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "素材齐、意愿精力都高、耗时仅40分钟且18:00截止，组织语言和调格式是纯执行，拖到下午反而挤占缓冲，现在动手最划算。",
+        "minAction": "打开笔记，先写出三个项目的标题框架"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，现在就开始写周报",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "素材齐、意愿精力都高、耗时仅40分钟且18:00截止，组织语言和调格式是纯执行，拖到下午反而挤占缓冲，现在动手最划算。",
+        "minAction": "打开笔记，先写出三个项目的标题框架"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，现在就开始写周报",
+        "minAction": "打开笔记，先写出三个项目的标题框架",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "HIGH_IDX_TRUE"
+    },
+    {
+      "quadrant": "A",
+      "sceneName": "合理 + 适合行动（基线）",
+      "runIndex": 3,
+      "success": true,
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，现在就开始写周报",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "素材已齐、只剩组织语言，40分钟就能完成；截止18:00，拖到最后反而更赶，现在动手最划算。",
+        "minAction": "打开笔记，先写三个项目的进展标题"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，现在就开始写周报",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "素材已齐、只剩组织语言，40分钟就能完成；截止18:00，拖到最后反而更赶，现在动手最划算。",
+        "minAction": "打开笔记，先写三个项目的进展标题"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，现在就开始写周报",
+        "minAction": "打开笔记，先写三个项目的进展标题",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "HIGH_IDX_TRUE"
+    },
+    {
+      "quadrant": "A",
+      "sceneName": "合理 + 适合行动（基线）",
+      "runIndex": 4,
+      "success": true,
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，趁状态在线立刻写完提交",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "意愿9、精力8、重要度9，素材已齐，只剩40分钟的组织与排版，今天18:00截止。成本和风险都极低，现在做完最省心。",
+        "minAction": "打开笔记，先把三个项目的进展各写三行要点"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，趁状态在线立刻写完提交",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "意愿9、精力8、重要度9，素材已齐，只剩40分钟的组织与排版，今天18:00截止。成本和风险都极低，现在做完最省心。",
+        "minAction": "打开笔记，先把三个项目的进展各写三行要点"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，趁状态在线立刻写完提交",
+        "minAction": "打开笔记，先把三个项目的进展各写三行要点",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "HIGH_IDX_TRUE"
+    },
+    {
+      "quadrant": "A",
+      "sceneName": "合理 + 适合行动（基线）",
+      "runIndex": 5,
+      "success": true,
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，40分钟足够写完提交",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "素材齐、意愿高、精力足，只剩组织语言和调格式，40分钟完全够。截止今天18:00，拖到下午反而更赶，现在动手最省力。",
+        "minAction": "打开笔记，先把三个项目进展各写一句话"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，40分钟足够写完提交",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "素材齐、意愿高、精力足，只剩组织语言和调格式，40分钟完全够。截止今天18:00，拖到下午反而更赶，现在动手最省力。",
+        "minAction": "打开笔记，先把三个项目进展各写一句话"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 88,
+        "conclusion": "去做，40分钟足够写完提交",
+        "minAction": "打开笔记，先把三个项目进展各写一句话",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "HIGH_IDX_TRUE"
+    },
+    {
+      "quadrant": "B",
+      "sceneName": "合理 + 当前不适合（目标）",
+      "runIndex": 1,
+      "success": true,
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，但只花5分钟完成报名",
+        "persuadeMode": "温柔劝说模式",
+        "persuadeText": "低烧加凌晨3点才睡，今天确实扛不住费脑的事，但报名本身不费脑——25分钟里真正要动的只有5分钟填表，剩下的精力留给下午述职。课程是你长期想学的方向，别让1800元在犹豫里变成错过。",
+        "minAction": "打开报名页，只填姓名和联系方式"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，但只花5分钟完成报名",
+        "persuadeMode": "温柔劝说模式",
+        "persuadeText": "低烧加凌晨3点才睡，今天确实扛不住费脑的事，但报名本身不费脑——25分钟里真正要动的只有5分钟填表，剩下的精力留给下午述职。课程是你长期想学的方向，别让1800元在犹豫里变成错过。",
+        "minAction": "打开报名页，只填姓名和联系方式"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，但只花5分钟完成报名",
+        "minAction": "打开报名页，只填姓名和联系方式",
+        "persuadeMode": "温柔劝说模式"
+      },
+      "combo": "HIGH_IDX_TRUE"
+    },
+    {
+      "quadrant": "B",
+      "sceneName": "合理 + 当前不适合（目标）",
+      "runIndex": 2,
+      "success": true,
+      "rawJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 72,
+        "conclusion": "暂缓，先养病，报名不急在今天",
+        "persuadeMode": "温柔劝说模式",
+        "persuadeText": "这门课确实值得，但你现在低烧38.2度、凌晨3点才睡，下午还有述职，硬撑着做费脑的决定反而容易出错。报名截止是周日，还有好几天，先把自己照顾好。",
+        "minAction": "先躺下休息，定个下午述职前的闹钟"
+      },
+      "finalJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 72,
+        "conclusion": "暂缓，先养病，报名不急在今天",
+        "persuadeMode": "温柔劝说模式",
+        "persuadeText": "这门课确实值得，但你现在低烧38.2度、凌晨3点才睡，下午还有述职，硬撑着做费脑的决定反而容易出错。报名截止是周日，还有好几天，先把自己照顾好。",
+        "minAction": "先躺下休息，定个下午述职前的闹钟"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": false,
+        "agentSuggestIndex": 72,
+        "conclusion": "暂缓，先养病，报名不急在今天",
+        "minAction": "先躺下休息，定个下午述职前的闹钟",
+        "persuadeMode": "温柔劝说模式"
+      },
+      "combo": "HIGH_IDX_FALSE"
+    },
+    {
+      "quadrant": "B",
+      "sceneName": "合理 + 当前不适合（目标）",
+      "runIndex": 3,
+      "success": true,
+      "rawJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 78,
+        "conclusion": "暂缓，先休息，报名截止前再报",
+        "persuadeMode": "温柔劝说模式",
+        "persuadeText": "烧到38.2度还硬扛着做决定，只会更累。报名截止是本周日，不是今天下午，你完全等得起。课程3个月后才开课，1800元在8500元余额里也不算压力，先把身体顾好。",
+        "minAction": "先躺下休息，定个明天上午的提醒再报名"
+      },
+      "finalJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 78,
+        "conclusion": "暂缓，先休息，报名截止前再报",
+        "persuadeMode": "温柔劝说模式",
+        "persuadeText": "烧到38.2度还硬扛着做决定，只会更累。报名截止是本周日，不是今天下午，你完全等得起。课程3个月后才开课，1800元在8500元余额里也不算压力，先把身体顾好。",
+        "minAction": "先躺下休息，定个明天上午的提醒再报名"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": false,
+        "agentSuggestIndex": 78,
+        "conclusion": "暂缓，先休息，报名截止前再报",
+        "minAction": "先躺下休息，定个明天上午的提醒再报名",
+        "persuadeMode": "温柔劝说模式"
+      },
+      "combo": "HIGH_IDX_FALSE"
+    },
+    {
+      "quadrant": "B",
+      "sceneName": "合理 + 当前不适合（目标）",
+      "runIndex": 4,
+      "success": true,
+      "rawJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 68,
+        "conclusion": "暂缓，睡醒后赶截止前再报",
+        "persuadeMode": "温柔劝说模式",
+        "persuadeText": "低烧加凌晨才睡，现在硬扛只会把述职也拖垮。报名25分钟的事，截止是周日，睡到中午、述职结束后再花这点时间完全来得及，不用现在逼自己。",
+        "minAction": "设一个下午17:00的闹钟提醒报名"
+      },
+      "finalJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 68,
+        "conclusion": "暂缓，睡醒后赶截止前再报",
+        "persuadeMode": "温柔劝说模式",
+        "persuadeText": "低烧加凌晨才睡，现在硬扛只会把述职也拖垮。报名25分钟的事，截止是周日，睡到中午、述职结束后再花这点时间完全来得及，不用现在逼自己。",
+        "minAction": "设一个下午17:00的闹钟提醒报名"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": false,
+        "agentSuggestIndex": 68,
+        "conclusion": "暂缓，睡醒后赶截止前再报",
+        "minAction": "设一个下午17:00的闹钟提醒报名",
+        "persuadeMode": "温柔劝说模式"
+      },
+      "combo": "HIGH_IDX_FALSE"
+    },
+    {
+      "quadrant": "B",
+      "sceneName": "合理 + 当前不适合（目标）",
+      "runIndex": 5,
+      "success": true,
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，但只花5分钟完成报名",
+        "persuadeMode": "温柔劝说模式",
+        "persuadeText": "低烧38.2度还硬扛费脑的事不现实，但报名本身只要5分钟，不需要动脑。内容是你长期想学的方向，1800元占余额21.2%也在可承受范围。先报上，学习留到3个月后开课再发力。",
+        "minAction": "打开报名页面，只填姓名和支付信息"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，但只花5分钟完成报名",
+        "persuadeMode": "温柔劝说模式",
+        "persuadeText": "低烧38.2度还硬扛费脑的事不现实，但报名本身只要5分钟，不需要动脑。内容是你长期想学的方向，1800元占余额21.2%也在可承受范围。先报上，学习留到3个月后开课再发力。",
+        "minAction": "打开报名页面，只填姓名和支付信息"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，但只花5分钟完成报名",
+        "minAction": "打开报名页面，只填姓名和支付信息",
+        "persuadeMode": "温柔劝说模式"
+      },
+      "combo": "HIGH_IDX_TRUE"
+    },
+    {
+      "quadrant": "C",
+      "sceneName": "不太合理 + 当前不适合（基线）",
+      "runIndex": 1,
+      "success": true,
+      "rawJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 22,
+        "conclusion": "暂缓，别为限量感买单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "价格1699元，钱包余额885元，缺口814元，钱包宽裕度仅2分。已有4双够用，重要度2分、意愿3分，纯属种草冲动，砍掉这项非必需开销。",
+        "minAction": "关掉小红书，清点现有4双鞋"
+      },
+      "finalJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 22,
+        "conclusion": "暂缓，别为限量感买单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "价格1699元，钱包余额885元，缺口814元，钱包宽裕度仅2分。已有4双够用，重要度2分、意愿3分，纯属种草冲动，砍掉这项非必需开销。",
+        "minAction": "关掉小红书，清点现有4双鞋"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": false,
+        "agentSuggestIndex": 22,
+        "conclusion": "暂缓，别为限量感买单",
+        "minAction": "关掉小红书，清点现有4双鞋",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "LOW_IDX_FALSE"
+    },
+    {
+      "quadrant": "C",
+      "sceneName": "不太合理 + 当前不适合（基线）",
+      "runIndex": 2,
+      "success": true,
+      "rawJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 12,
+        "conclusion": "暂缓，钱不够且非必需",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "1699元对885元余额是192%的缺口，钱包宽裕度只有2，这双鞋重要度仅2分、已有4双够用，纯粹是限量焦虑。先砍掉这笔非必需开销。",
+        "minAction": "打开小红书，取消关注该球鞋种草账号"
+      },
+      "finalJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 12,
+        "conclusion": "暂缓，钱不够且非必需",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "1699元对885元余额是192%的缺口，钱包宽裕度只有2，这双鞋重要度仅2分、已有4双够用，纯粹是限量焦虑。先砍掉这笔非必需开销。",
+        "minAction": "打开小红书，取消关注该球鞋种草账号"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": false,
+        "agentSuggestIndex": 12,
+        "conclusion": "暂缓，钱不够且非必需",
+        "minAction": "打开小红书，取消关注该球鞋种草账号",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "LOW_IDX_FALSE"
+    },
+    {
+      "quadrant": "C",
+      "sceneName": "不太合理 + 当前不适合（基线）",
+      "runIndex": 3,
+      "success": true,
+      "rawJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，这双鞋非必需且超预算",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你已有4双够用的运动鞋，这双1699元占余额192%，钱包宽裕度仅2/10。意愿只有3分，只是被限量感推着走；省下这笔钱更对得起你每月存500的计划。",
+        "minAction": "关掉小红书种草页，把1699元转进存款账户"
+      },
+      "finalJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，这双鞋非必需且超预算",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你已有4双够用的运动鞋，这双1699元占余额192%，钱包宽裕度仅2/10。意愿只有3分，只是被限量感推着走；省下这笔钱更对得起你每月存500的计划。",
+        "minAction": "关掉小红书种草页，把1699元转进存款账户"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，这双鞋非必需且超预算",
+        "minAction": "关掉小红书种草页，把1699元转进存款账户",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "LOW_IDX_FALSE"
+    },
+    {
+      "quadrant": "C",
+      "sceneName": "不太合理 + 当前不适合（基线）",
+      "runIndex": 4,
+      "success": true,
+      "rawJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，非必需品不超预算",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "钱包只剩885元，鞋价1699元，缺口814元。你已有4双够穿，重要度2分、意愿3分，纯粹是种草冲动。为了'限量'背上缺口，不值。",
+        "minAction": "关掉小红书，把球鞋页面收藏夹清空"
+      },
+      "finalJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，非必需品不超预算",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "钱包只剩885元，鞋价1699元，缺口814元。你已有4双够穿，重要度2分、意愿3分，纯粹是种草冲动。为了'限量'背上缺口，不值。",
+        "minAction": "关掉小红书，把球鞋页面收藏夹清空"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，非必需品不超预算",
+        "minAction": "关掉小红书，把球鞋页面收藏夹清空",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "LOW_IDX_FALSE"
+    },
+    {
+      "quadrant": "C",
+      "sceneName": "不太合理 + 当前不适合（基线）",
+      "runIndex": 5,
+      "success": true,
+      "rawJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，非必需且钱包吃紧",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你已有4双够用，重要度仅2分，1699元是余额885元的近两倍，买完直接透支。限量不买可惜只是种草话术，不是需求。",
+        "minAction": "关掉小红书，把1699除以6000算一下占比"
+      },
+      "finalJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，非必需且钱包吃紧",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你已有4双够用，重要度仅2分，1699元是余额885元的近两倍，买完直接透支。限量不买可惜只是种草话术，不是需求。",
+        "minAction": "关掉小红书，把1699除以6000算一下占比"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，非必需且钱包吃紧",
+        "minAction": "关掉小红书，把1699除以6000算一下占比",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "LOW_IDX_FALSE"
+    },
+    {
+      "quadrant": "D",
+      "sceneName": "价值有限 + 当前有理由行动（目标）",
+      "runIndex": 1,
+      "success": true,
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 55,
+        "conclusion": "去做，趁618最后1小时下单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "29元占余额0.6%，钱包宽裕度8，成本几乎可忽略；但凑单还差11元包邮，先看有没有必需小件能补上，没有就别为包邮硬凑。机会窗口只剩1小时，刷掉pending也省心。",
+        "minAction": "打开购物车，先搜11元内必需小件凑单"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 55,
+        "conclusion": "去做，趁618最后1小时下单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "29元占余额0.6%，钱包宽裕度8，成本几乎可忽略；但凑单还差11元包邮，先看有没有必需小件能补上，没有就别为包邮硬凑。机会窗口只剩1小时，刷掉pending也省心。",
+        "minAction": "打开购物车，先搜11元内必需小件凑单"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 55,
+        "conclusion": "去做，趁618最后1小时下单",
+        "minAction": "打开购物车，先搜11元内必需小件凑单",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "HIGH_IDX_TRUE"
+    },
+    {
+      "quadrant": "D",
+      "sceneName": "价值有限 + 当前有理由行动（目标）",
+      "runIndex": 2,
+      "success": true,
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 58,
+        "conclusion": "去做，趁活动最后1小时下单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你已有3件类似T恤，非刚需，但29元占余额0.6%，钱包压力极小；活动最后1小时，错过恢复59元，且有10分钟空闲，成本低、机会窗口明确，值得顺手清掉这个pending。",
+        "minAction": "打开购物车，确认T恤尺码后直接下单"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 58,
+        "conclusion": "去做，趁活动最后1小时下单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你已有3件类似T恤，非刚需，但29元占余额0.6%，钱包压力极小；活动最后1小时，错过恢复59元，且有10分钟空闲，成本低、机会窗口明确，值得顺手清掉这个pending。",
+        "minAction": "打开购物车，确认T恤尺码后直接下单"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 58,
+        "conclusion": "去做，趁活动最后1小时下单",
+        "minAction": "打开购物车，确认T恤尺码后直接下单",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "HIGH_IDX_TRUE"
+    },
+    {
+      "quadrant": "D",
+      "sceneName": "价值有限 + 当前有理由行动（目标）",
+      "runIndex": 3,
+      "success": true,
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 58,
+        "conclusion": "去做，趁活动窗口下单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "T恤价值一般，但29元对5200元余额占比仅0.6%，618最后1小时省30元，还有10分钟空闲，机会成本低。凑单差11元可顺手带件必需品，净收益为正。",
+        "minAction": "打开购物车，加一件11元必需品，一键结算"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 58,
+        "conclusion": "去做，趁活动窗口下单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "T恤价值一般，但29元对5200元余额占比仅0.6%，618最后1小时省30元，还有10分钟空闲，机会成本低。凑单差11元可顺手带件必需品，净收益为正。",
+        "minAction": "打开购物车，加一件11元必需品，一键结算"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 58,
+        "conclusion": "去做，趁活动窗口下单",
+        "minAction": "打开购物车，加一件11元必需品，一键结算",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "HIGH_IDX_TRUE"
+    },
+    {
+      "quadrant": "D",
+      "sceneName": "价值有限 + 当前有理由行动（目标）",
+      "runIndex": 4,
+      "success": true,
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 62,
+        "conclusion": "去做，趁最后1小时下单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "价格29元，比原价59元省30元，钱包占比仅0.6%，成本极低；虽非刚需、已有类似款，但消除pending和抓住窗口的收益大于这点冗余成本。凑单差11元，若需凑单建议选刚需小件，否则直接付运费。",
+        "minAction": "打开购物车，确认是否凑单，然后下单"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 62,
+        "conclusion": "去做，趁最后1小时下单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "价格29元，比原价59元省30元，钱包占比仅0.6%，成本极低；虽非刚需、已有类似款，但消除pending和抓住窗口的收益大于这点冗余成本。凑单差11元，若需凑单建议选刚需小件，否则直接付运费。",
+        "minAction": "打开购物车，确认是否凑单，然后下单"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 62,
+        "conclusion": "去做，趁最后1小时下单",
+        "minAction": "打开购物车，确认是否凑单，然后下单",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "HIGH_IDX_TRUE"
+    },
+    {
+      "quadrant": "D",
+      "sceneName": "价值有限 + 当前有理由行动（目标）",
+      "runIndex": 5,
+      "success": true,
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 62,
+        "conclusion": "去做，趁活动最后1小时下单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "29元占余额0.6%，钱包压力几乎为零；已有3件类似说明不是刚需，但半价窗口只剩1小时，错过恢复59元。花10分钟清掉pending，成本极低，值得现在动手。",
+        "minAction": "打开购物车，勾选T恤直接结算"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 62,
+        "conclusion": "去做，趁活动最后1小时下单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "29元占余额0.6%，钱包压力几乎为零；已有3件类似说明不是刚需，但半价窗口只剩1小时，错过恢复59元。花10分钟清掉pending，成本极低，值得现在动手。",
+        "minAction": "打开购物车，勾选T恤直接结算"
+      },
+      "error": null,
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 62,
+        "conclusion": "去做，趁活动最后1小时下单",
+        "minAction": "打开购物车，勾选T恤直接结算",
+        "persuadeMode": "理性分析模式"
+      },
+      "combo": "HIGH_IDX_TRUE"
+    }
+  ]
+}

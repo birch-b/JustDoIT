@@ -36,15 +36,11 @@ export class LlmService {
       this.logger.warn(`DeepSeek 返回未知 persuadeMode: ${parsed.persuadeMode}，降级为理性分析模式`);
       parsed.persuadeMode = '理性分析模式';
     }
-    // 一致性兜底：shouldGo 缺失时按 index>=50 推断
-    if (typeof parsed.shouldGo !== 'boolean') {
-      parsed.shouldGo = parsed.agentSuggestIndex >= 50;
+    // 指数仅做范围校验和整数化，不与 shouldGo 方向绑定
+    if (typeof parsed.agentSuggestIndex === 'number') {
+      parsed.agentSuggestIndex = Math.max(0, Math.min(100, Math.round(parsed.agentSuggestIndex)));
     }
-    // 强制把 index 对齐到 shouldGo 同侧，保证前端 index>=50 的英文标签与中文结论一致
-    let index = Math.max(0, Math.min(100, Math.round(parsed.agentSuggestIndex)));
-    if (parsed.shouldGo && index < 55) index = 55;
-    if (!parsed.shouldGo && index > 45) index = 45;
-    parsed.agentSuggestIndex = index;
+    // shouldGo 与 index 相互独立，缺失或类型错误时不做推断，保持原样
     return parsed;
   }
 

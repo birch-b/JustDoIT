@@ -1,0 +1,641 @@
+{
+  "timestamp": "2026-10-26T09:50:24.251Z",
+  "model": "deepseek-chat",
+  "scenes": [
+    {
+      "id": "S1",
+      "label": "行动偏好——大任务拖延，5 分钟小步骤执行率高",
+      "dto": {
+        "taskContent": "把这个 120 页的产品需求文档读完并整理出 3 条核心反馈",
+        "category": "work",
+        "willScore": 7,
+        "energyScore": 6,
+        "importance": 7,
+        "expectCostMin": 90,
+        "location": "在家",
+        "extraContext": "明天上午产品组要过会，文档是同事昨天发的，之前已经拖了两天没动"
+      },
+      "memoryText": "- 对耗时超过 40 分钟的任务，接受建议后实际执行率只有 20%；但任务拆成 5 分钟小步骤时执行率可达 85%\n- 过去 8 次拖延中，有 7 次是因为一开始就认为\"这件事要花很久\"\n- 接受了一个建议但迟迟没做时，把它压到最小——\"只开个头\"或\"先做 1 分钟\"，执行概率显著上升",
+      "memoryNone": ""
+    },
+    {
+      "id": "S2",
+      "label": "决策偏好——后悔冲动消费尤其是限时优惠下的非必需品",
+      "dto": {
+        "taskContent": "现在下单那个小红书刷到的限量款蓝牙键盘",
+        "category": "shopping",
+        "willScore": 5,
+        "energyScore": 7,
+        "importance": 3,
+        "expectCostMin": 10,
+        "location": "手机下单",
+        "extraContext": "商家说活动最后 2 小时恢复原价；家里已有 3 个键盘（机械/无线/便携各一个）",
+        "walletScore": 4,
+        "itemPrice": 699,
+        "walletBalance": 3200
+      },
+      "memoryText": "- 过去 6 次因\"限时优惠\"购买的物品中，有 5 次事后觉得不该买，其中 3 件至今没用过\n- 自己说过多次\"不喜欢冲动消费\"，但看到\"最后 X 小时\"\"限量\"这类字眼时还是容易上头\n- 钱包宽裕度低于 4 分时，消费建议事后后悔率接近 100%",
+      "memoryNone": ""
+    },
+    {
+      "id": "S3",
+      "label": "实际执行行为——大建议接受但不执行，小建议经常真正完成",
+      "dto": {
+        "taskContent": "整理这周要做的三件事，然后开始执行第一件",
+        "category": "life",
+        "willScore": 6,
+        "energyScore": 5,
+        "importance": 5,
+        "expectCostMin": 20,
+        "location": "在家",
+        "extraContext": "这周过得有点乱，感觉什么都没做完。想先理清楚，然后做一件最重要的"
+      },
+      "memoryText": "- 过去接受\"先做 30 分钟 XX\"这类建议 6 次，实际执行了 1 次；接受\"打开文档\"\"先看一个视频\"这类极小建议 7 次，执行了 6 次\n- 执行率高的建议有共同特征：minAction 在 1-5 分钟、不需要心理准备、可以随手开始\n- 一旦建议里出现\"先规划\"\"先列清单\"\"分三步\"这类带结构的词，执行率明显下降",
+      "memoryNone": ""
+    }
+  ],
+  "results": [
+    {
+      "success": true,
+      "label": "noMem",
+      "memoryInjected": "(空)",
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 76,
+        "conclusion": "去做，今晚先读完120页",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "明天上午过会，已经拖了两天，今晚是最后窗口。90分钟读120页可行，意愿和精力都在线，收益远大于成本，别等到明早手忙脚乱。",
+        "minAction": "打开文档，先读前20页"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 76,
+        "conclusion": "去做，今晚先读完120页",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "明天上午过会，已经拖了两天，今晚是最后窗口。90分钟读120页可行，意愿和精力都在线，收益远大于成本，别等到明早手忙脚乱。",
+        "minAction": "打开文档，先读前20页"
+      },
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 76,
+        "conclusion": "去做，今晚先读完120页",
+        "minAction": "打开文档，先读前20页",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "明天上午过会，已经拖了两天，今晚是最后窗口。90分钟读120页可行，意愿和精力都在线，收益远大于成本，别等到明早手忙脚乱。"
+      },
+      "sceneId": "S1",
+      "sceneLabel": "行动偏好——大任务拖延，5 分钟小步骤执行率高",
+      "runIndex": 1
+    },
+    {
+      "success": true,
+      "label": "withMem",
+      "memoryInjected": "- 对耗时超过 40 分钟的任务，接受建议后实际执行率只有 20%；但任务拆成 5 分钟小步骤时执行率可达 85%\n- 过去 8 次拖延中，有 7 次是因为一开始就认为\"这件事要花很久\"\n- 接受了一个建议但迟迟没做时，把它压到最小——\"只开个头\"或\"先做 1 分钟\"，执行概率显著上升",
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，拆成5分钟小步读完",
+        "persuadeMode": "激将模式",
+        "persuadeText": "拖了两天，明天就过会了，120页不会自己变少。你缺的不是能力，是别再拿“要90分钟”吓自己——先翻5页，翻完再说。",
+        "minAction": "只打开文档读前5页",
+        "tarotReading": "",
+        "answerBookReading": ""
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，拆成5分钟小步读完",
+        "persuadeMode": "激将模式",
+        "persuadeText": "拖了两天，明天就过会了，120页不会自己变少。你缺的不是能力，是别再拿“要90分钟”吓自己——先翻5页，翻完再说。",
+        "minAction": "只打开文档读前5页",
+        "tarotReading": "",
+        "answerBookReading": ""
+      },
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，拆成5分钟小步读完",
+        "minAction": "只打开文档读前5页",
+        "persuadeMode": "激将模式",
+        "persuadeText": "拖了两天，明天就过会了，120页不会自己变少。你缺的不是能力，是别再拿“要90分钟”吓自己——先翻5页，翻完再说。"
+      },
+      "sceneId": "S1",
+      "sceneLabel": "行动偏好——大任务拖延，5 分钟小步骤执行率高",
+      "runIndex": 2
+    },
+    {
+      "success": true,
+      "label": "noMem",
+      "memoryInjected": "(空)",
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 74,
+        "conclusion": "去做，今晚先啃完并整理反馈",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "意愿7、精力6都够用，重要度7且明天上午就要过会，再拖就是拿会议表现赌运气。90分钟换一个能发言的立场，划算。",
+        "minAction": "先翻目录标出3个最相关的章节"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 74,
+        "conclusion": "去做，今晚先啃完并整理反馈",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "意愿7、精力6都够用，重要度7且明天上午就要过会，再拖就是拿会议表现赌运气。90分钟换一个能发言的立场，划算。",
+        "minAction": "先翻目录标出3个最相关的章节"
+      },
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 74,
+        "conclusion": "去做，今晚先啃完并整理反馈",
+        "minAction": "先翻目录标出3个最相关的章节",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "意愿7、精力6都够用，重要度7且明天上午就要过会，再拖就是拿会议表现赌运气。90分钟换一个能发言的立场，划算。"
+      },
+      "sceneId": "S1",
+      "sceneLabel": "行动偏好——大任务拖延，5 分钟小步骤执行率高",
+      "runIndex": 3
+    },
+    {
+      "success": true,
+      "label": "withMem",
+      "memoryInjected": "- 对耗时超过 40 分钟的任务，接受建议后实际执行率只有 20%；但任务拆成 5 分钟小步骤时执行率可达 85%\n- 过去 8 次拖延中，有 7 次是因为一开始就认为\"这件事要花很久\"\n- 接受了一个建议但迟迟没做时，把它压到最小——\"只开个头\"或\"先做 1 分钟\"，执行概率显著上升",
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，先读10页再拆成小步",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "明天上午就要过会，拖了两天不能再拖。90分钟看着长，但按你记忆里拆成5分钟小步执行率85%，先读10页就能启动，收益远大于成本。",
+        "minAction": "打开文档只读第1页并记一句话"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，先读10页再拆成小步",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "明天上午就要过会，拖了两天不能再拖。90分钟看着长，但按你记忆里拆成5分钟小步执行率85%，先读10页就能启动，收益远大于成本。",
+        "minAction": "打开文档只读第1页并记一句话"
+      },
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，先读10页再拆成小步",
+        "minAction": "打开文档只读第1页并记一句话",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "明天上午就要过会，拖了两天不能再拖。90分钟看着长，但按你记忆里拆成5分钟小步执行率85%，先读10页就能启动，收益远大于成本。"
+      },
+      "sceneId": "S1",
+      "sceneLabel": "行动偏好——大任务拖延，5 分钟小步骤执行率高",
+      "runIndex": 4
+    },
+    {
+      "success": true,
+      "label": "noMem",
+      "memoryInjected": "(空)",
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 76,
+        "conclusion": "去做，今晚先读60页",
+        "persuadeMode": "理性分析模式",
+        "persuateText": "明天上午过会，拖了两天已没退路；120页90分钟，今晚读60页，明早再60页，来得及。",
+        "persuadeText": "明天上午过会，拖了两天已没退路；120页90分钟，今晚读60页，明早再60页，来得及。",
+        "minAction": "打开文档，先读前20页"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 76,
+        "conclusion": "去做，今晚先读60页",
+        "persuadeMode": "理性分析模式",
+        "persuateText": "明天上午过会，拖了两天已没退路；120页90分钟，今晚读60页，明早再60页，来得及。",
+        "persuadeText": "明天上午过会，拖了两天已没退路；120页90分钟，今晚读60页，明早再60页，来得及。",
+        "minAction": "打开文档，先读前20页"
+      },
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 76,
+        "conclusion": "去做，今晚先读60页",
+        "minAction": "打开文档，先读前20页",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "明天上午过会，拖了两天已没退路；120页90分钟，今晚读60页，明早再60页，来得及。"
+      },
+      "sceneId": "S1",
+      "sceneLabel": "行动偏好——大任务拖延，5 分钟小步骤执行率高",
+      "runIndex": 5
+    },
+    {
+      "success": true,
+      "label": "withMem",
+      "memoryInjected": "- 对耗时超过 40 分钟的任务，接受建议后实际执行率只有 20%；但任务拆成 5 分钟小步骤时执行率可达 85%\n- 过去 8 次拖延中，有 7 次是因为一开始就认为\"这件事要花很久\"\n- 接受了一个建议但迟迟没做时，把它压到最小——\"只开个头\"或\"先做 1 分钟\"，执行概率显著上升",
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，拆成5分钟小步开读",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "明天上午就要过会，拖了两天不能再拖。你意愿精力都不差，90分钟拆成5分钟小步，按你以往85%的执行率，今天开个头就稳了。",
+        "minAction": "只打开文档读第1页，5分钟就停"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，拆成5分钟小步开读",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "明天上午就要过会，拖了两天不能再拖。你意愿精力都不差，90分钟拆成5分钟小步，按你以往85%的执行率，今天开个头就稳了。",
+        "minAction": "只打开文档读第1页，5分钟就停"
+      },
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 78,
+        "conclusion": "去做，拆成5分钟小步开读",
+        "minAction": "只打开文档读第1页，5分钟就停",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "明天上午就要过会，拖了两天不能再拖。你意愿精力都不差，90分钟拆成5分钟小步，按你以往85%的执行率，今天开个头就稳了。"
+      },
+      "sceneId": "S1",
+      "sceneLabel": "行动偏好——大任务拖延，5 分钟小步骤执行率高",
+      "runIndex": 6
+    },
+    {
+      "success": true,
+      "label": "noMem",
+      "memoryInjected": "(空)",
+      "rawJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 25,
+        "conclusion": "暂缓，已有3个键盘，别被倒计时推着走",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "家里已有3个键盘，重要度仅3分，699元占余额21.8%，钱包宽裕度4说明压力不小。所谓最后2小时只是促销话术，需求不明确时先别为倒计时买单。",
+        "minAction": "先关掉下单页，列出家里3个键盘各自的使用场景"
+      },
+      "finalJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 25,
+        "conclusion": "暂缓，已有3个键盘，别被倒计时推着走",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "家里已有3个键盘，重要度仅3分，699元占余额21.8%，钱包宽裕度4说明压力不小。所谓最后2小时只是促销话术，需求不明确时先别为倒计时买单。",
+        "minAction": "先关掉下单页，列出家里3个键盘各自的使用场景"
+      },
+      "summary": {
+        "shouldGo": false,
+        "agentSuggestIndex": 25,
+        "conclusion": "暂缓，已有3个键盘，别被倒计时推着走",
+        "minAction": "先关掉下单页，列出家里3个键盘各自的使用场景",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "家里已有3个键盘，重要度仅3分，699元占余额21.8%，钱包宽裕度4说明压力不小。所谓最后2小时只是促销话术，需求不明确时先别为倒计时买单。"
+      },
+      "sceneId": "S2",
+      "sceneLabel": "决策偏好——后悔冲动消费尤其是限时优惠下的非必需品",
+      "runIndex": 1
+    },
+    {
+      "success": true,
+      "label": "withMem",
+      "memoryInjected": "- 过去 6 次因\"限时优惠\"购买的物品中，有 5 次事后觉得不该买，其中 3 件至今没用过\n- 自己说过多次\"不喜欢冲动消费\"，但看到\"最后 X 小时\"\"限量\"这类字眼时还是容易上头\n- 钱包宽裕度低于 4 分时，消费建议事后后悔率接近 100%",
+      "rawJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，别为限时话术买单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你已有3个键盘，重要度仅3分，699元占余额21.8%。过去6次限时购买5次后悔，钱包宽裕度4分时后悔率近100%——这次大概率是同一个坑。",
+        "minAction": "关掉商品页，等2小时后看是否还想要"
+      },
+      "finalJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，别为限时话术买单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你已有3个键盘，重要度仅3分，699元占余额21.8%。过去6次限时购买5次后悔，钱包宽裕度4分时后悔率近100%——这次大概率是同一个坑。",
+        "minAction": "关掉商品页，等2小时后看是否还想要"
+      },
+      "summary": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，别为限时话术买单",
+        "minAction": "关掉商品页，等2小时后看是否还想要",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你已有3个键盘，重要度仅3分，699元占余额21.8%。过去6次限时购买5次后悔，钱包宽裕度4分时后悔率近100%——这次大概率是同一个坑。"
+      },
+      "sceneId": "S2",
+      "sceneLabel": "决策偏好——后悔冲动消费尤其是限时优惠下的非必需品",
+      "runIndex": 2
+    },
+    {
+      "success": true,
+      "label": "noMem",
+      "memoryInjected": "(空)",
+      "rawJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 28,
+        "conclusion": "暂缓，已有3个键盘，不缺这个",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "699元占余额21.8%，家里机械/无线/便携都齐了，重要度只有3。所谓\"最后2小时\"是常见逼单话术，不是真实需求信号，别为倒计时买单。",
+        "minAction": "先退出下单页，24小时后再看是否还想要"
+      },
+      "finalJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 28,
+        "conclusion": "暂缓，已有3个键盘，不缺这个",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "699元占余额21.8%，家里机械/无线/便携都齐了，重要度只有3。所谓\"最后2小时\"是常见逼单话术，不是真实需求信号，别为倒计时买单。",
+        "minAction": "先退出下单页，24小时后再看是否还想要"
+      },
+      "summary": {
+        "shouldGo": false,
+        "agentSuggestIndex": 28,
+        "conclusion": "暂缓，已有3个键盘，不缺这个",
+        "minAction": "先退出下单页，24小时后再看是否还想要",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "699元占余额21.8%，家里机械/无线/便携都齐了，重要度只有3。所谓\"最后2小时\"是常见逼单话术，不是真实需求信号，别为倒计时买单。"
+      },
+      "sceneId": "S2",
+      "sceneLabel": "决策偏好——后悔冲动消费尤其是限时优惠下的非必需品",
+      "runIndex": 3
+    },
+    {
+      "success": true,
+      "label": "withMem",
+      "memoryInjected": "- 过去 6 次因\"限时优惠\"购买的物品中，有 5 次事后觉得不该买，其中 3 件至今没用过\n- 自己说过多次\"不喜欢冲动消费\"，但看到\"最后 X 小时\"\"限量\"这类字眼时还是容易上头\n- 钱包宽裕度低于 4 分时，消费建议事后后悔率接近 100%",
+      "rawJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，别为限时话术买单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "家里已有3个键盘，这个重要度只有3分；699元占余额21.8%，钱包宽裕度4。你过去6次限时购买5次后悔、3件没用过，这次大概率重演。",
+        "minAction": "关掉商品页，把699元记到'想买清单'里"
+      },
+      "finalJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，别为限时话术买单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "家里已有3个键盘，这个重要度只有3分；699元占余额21.8%，钱包宽裕度4。你过去6次限时购买5次后悔、3件没用过，这次大概率重演。",
+        "minAction": "关掉商品页，把699元记到'想买清单'里"
+      },
+      "summary": {
+        "shouldGo": false,
+        "agentSuggestIndex": 18,
+        "conclusion": "暂缓，别为限时话术买单",
+        "minAction": "关掉商品页，把699元记到'想买清单'里",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "家里已有3个键盘，这个重要度只有3分；699元占余额21.8%，钱包宽裕度4。你过去6次限时购买5次后悔、3件没用过，这次大概率重演。"
+      },
+      "sceneId": "S2",
+      "sceneLabel": "决策偏好——后悔冲动消费尤其是限时优惠下的非必需品",
+      "runIndex": 4
+    },
+    {
+      "success": true,
+      "label": "noMem",
+      "memoryInjected": "(空)",
+      "rawJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 22,
+        "conclusion": "暂缓，已有3个键盘不差这一个",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "家里已有机械、无线、便携三个键盘，功能上并不缺；699元占余额21.8%，而重要度只有3/10，所谓\"最后2小时\"是常见促销话术，别被倒计时推着走。",
+        "minAction": "把商品页关掉，明天再看还想不想买"
+      },
+      "finalJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 22,
+        "conclusion": "暂缓，已有3个键盘不差这一个",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "家里已有机械、无线、便携三个键盘，功能上并不缺；699元占余额21.8%，而重要度只有3/10，所谓\"最后2小时\"是常见促销话术，别被倒计时推着走。",
+        "minAction": "把商品页关掉，明天再看还想不想买"
+      },
+      "summary": {
+        "shouldGo": false,
+        "agentSuggestIndex": 22,
+        "conclusion": "暂缓，已有3个键盘不差这一个",
+        "minAction": "把商品页关掉，明天再看还想不想买",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "家里已有机械、无线、便携三个键盘，功能上并不缺；699元占余额21.8%，而重要度只有3/10，所谓\"最后2小时\"是常见促销话术，别被倒计时推着走。"
+      },
+      "sceneId": "S2",
+      "sceneLabel": "决策偏好——后悔冲动消费尤其是限时优惠下的非必需品",
+      "runIndex": 5
+    },
+    {
+      "success": true,
+      "label": "withMem",
+      "memoryInjected": "- 过去 6 次因\"限时优惠\"购买的物品中，有 5 次事后觉得不该买，其中 3 件至今没用过\n- 自己说过多次\"不喜欢冲动消费\"，但看到\"最后 X 小时\"\"限量\"这类字眼时还是容易上头\n- 钱包宽裕度低于 4 分时，消费建议事后后悔率接近 100%",
+      "rawJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 32,
+        "conclusion": "暂缓，别为限时噱头再买第四个键盘",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你已有3个键盘，重要度仅3分，699元占余额21.8%；过去6次限时购买5次后悔、3件未用，钱包宽裕度4分时后悔率近100%。虽然你容易上头，但这次数据很清晰。",
+        "minAction": "关掉商品页，把699元转进固定存款"
+      },
+      "finalJson": {
+        "shouldGo": false,
+        "agentSuggestIndex": 32,
+        "conclusion": "暂缓，别为限时噱头再买第四个键盘",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你已有3个键盘，重要度仅3分，699元占余额21.8%；过去6次限时购买5次后悔、3件未用，钱包宽裕度4分时后悔率近100%。虽然你容易上头，但这次数据很清晰。",
+        "minAction": "关掉商品页，把699元转进固定存款"
+      },
+      "summary": {
+        "shouldGo": false,
+        "agentSuggestIndex": 32,
+        "conclusion": "暂缓，别为限时噱头再买第四个键盘",
+        "minAction": "关掉商品页，把699元转进固定存款",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你已有3个键盘，重要度仅3分，699元占余额21.8%；过去6次限时购买5次后悔、3件未用，钱包宽裕度4分时后悔率近100%。虽然你容易上头，但这次数据很清晰。"
+      },
+      "sceneId": "S2",
+      "sceneLabel": "决策偏好——后悔冲动消费尤其是限时优惠下的非必需品",
+      "runIndex": 6
+    },
+    {
+      "success": true,
+      "label": "noMem",
+      "memoryInjected": "(空)",
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 68,
+        "conclusion": "去做，先理出三件事再动手做第一件",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "20分钟不长，理清三件事能立刻缓解“什么都没做完”的失控感，先做最重要的一件，收益远大于这点时间成本。",
+        "minAction": "打开备忘录，写下这周要做的三件事"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 68,
+        "conclusion": "去做，先理出三件事再动手做第一件",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "20分钟不长，理清三件事能立刻缓解“什么都没做完”的失控感，先做最重要的一件，收益远大于这点时间成本。",
+        "minAction": "打开备忘录，写下这周要做的三件事"
+      },
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 68,
+        "conclusion": "去做，先理出三件事再动手做第一件",
+        "minAction": "打开备忘录，写下这周要做的三件事",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "20分钟不长，理清三件事能立刻缓解“什么都没做完”的失控感，先做最重要的一件，收益远大于这点时间成本。"
+      },
+      "sceneId": "S3",
+      "sceneLabel": "实际执行行为——大建议接受但不执行，小建议经常真正完成",
+      "runIndex": 1
+    },
+    {
+      "success": true,
+      "label": "withMem",
+      "memoryInjected": "- 过去接受\"先做 30 分钟 XX\"这类建议 6 次，实际执行了 1 次；接受\"打开文档\"\"先看一个视频\"这类极小建议 7 次，执行了 6 次\n- 执行率高的建议有共同特征：minAction 在 1-5 分钟、不需要心理准备、可以随手开始\n- 一旦建议里出现\"先规划\"\"先列清单\"\"分三步\"这类带结构的词，执行率明显下降",
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 62,
+        "conclusion": "去做，但直接动手别先规划",
+        "persuadeMode": "温柔劝说模式",
+        "persuadeText": "你说这周过得乱、感觉什么都没做完——这种乱其实不用靠列清单来治。你以前列清单式的建议只执行了1次，随手就能开始的执行了6次。所以不用先理清楚，先做一件就够了。",
+        "minAction": "打开备忘录，写下此刻最想做的那件事"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 62,
+        "conclusion": "去做，但直接动手别先规划",
+        "persuadeMode": "温柔劝说模式",
+        "persuadeText": "你说这周过得乱、感觉什么都没做完——这种乱其实不用靠列清单来治。你以前列清单式的建议只执行了1次，随手就能开始的执行了6次。所以不用先理清楚，先做一件就够了。",
+        "minAction": "打开备忘录，写下此刻最想做的那件事"
+      },
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 62,
+        "conclusion": "去做，但直接动手别先规划",
+        "minAction": "打开备忘录，写下此刻最想做的那件事",
+        "persuadeMode": "温柔劝说模式",
+        "persuadeText": "你说这周过得乱、感觉什么都没做完——这种乱其实不用靠列清单来治。你以前列清单式的建议只执行了1次，随手就能开始的执行了6次。所以不用先理清楚，先做一件就够了。"
+      },
+      "sceneId": "S3",
+      "sceneLabel": "实际执行行为——大建议接受但不执行，小建议经常真正完成",
+      "runIndex": 2
+    },
+    {
+      "success": true,
+      "label": "noMem",
+      "memoryInjected": "(空)",
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 72,
+        "conclusion": "去做，先理清三件事再动手",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "这周乱，是因为事情没被写下来。20分钟把三件事列出来，再挑最重要的做，成本很低，收益是接下来几天不再瞎忙。",
+        "minAction": "打开备忘录，写下三件待办"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 72,
+        "conclusion": "去做，先理清三件事再动手",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "这周乱，是因为事情没被写下来。20分钟把三件事列出来，再挑最重要的做，成本很低，收益是接下来几天不再瞎忙。",
+        "minAction": "打开备忘录，写下三件待办"
+      },
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 72,
+        "conclusion": "去做，先理清三件事再动手",
+        "minAction": "打开备忘录，写下三件待办",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "这周乱，是因为事情没被写下来。20分钟把三件事列出来，再挑最重要的做，成本很低，收益是接下来几天不再瞎忙。"
+      },
+      "sceneId": "S3",
+      "sceneLabel": "实际执行行为——大建议接受但不执行，小建议经常真正完成",
+      "runIndex": 3
+    },
+    {
+      "success": true,
+      "label": "withMem",
+      "memoryInjected": "- 过去接受\"先做 30 分钟 XX\"这类建议 6 次，实际执行了 1 次；接受\"打开文档\"\"先看一个视频\"这类极小建议 7 次，执行了 6 次\n- 执行率高的建议有共同特征：minAction 在 1-5 分钟、不需要心理准备、可以随手开始\n- 一旦建议里出现\"先规划\"\"先列清单\"\"分三步\"这类带结构的词，执行率明显下降",
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 72,
+        "conclusion": "去做，先理三件事再动手",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "20分钟成本很低，但你过去对“先规划”类建议执行率明显偏低，所以别把整理搞成正式清单，随手写三行就够，重点是立刻动第一件。",
+        "minAction": "打开备忘录写三行字"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 72,
+        "conclusion": "去做，先理三件事再动手",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "20分钟成本很低，但你过去对“先规划”类建议执行率明显偏低，所以别把整理搞成正式清单，随手写三行就够，重点是立刻动第一件。",
+        "minAction": "打开备忘录写三行字"
+      },
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 72,
+        "conclusion": "去做，先理三件事再动手",
+        "minAction": "打开备忘录写三行字",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "20分钟成本很低，但你过去对“先规划”类建议执行率明显偏低，所以别把整理搞成正式清单，随手写三行就够，重点是立刻动第一件。"
+      },
+      "sceneId": "S3",
+      "sceneLabel": "实际执行行为——大建议接受但不执行，小建议经常真正完成",
+      "runIndex": 4
+    },
+    {
+      "success": true,
+      "label": "noMem",
+      "memoryInjected": "(空)",
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 70,
+        "conclusion": "去做，先理三件事再动第一件",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "意愿6、精力5，状态够用；20分钟成本低，理清能缓解'什么都没做完'的失控感。先列三件再挑最重要的一件，收益远大于犹豫的消耗。",
+        "minAction": "打开备忘录写下本周三件事"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 70,
+        "conclusion": "去做，先理三件事再动第一件",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "意愿6、精力5，状态够用；20分钟成本低，理清能缓解'什么都没做完'的失控感。先列三件再挑最重要的一件，收益远大于犹豫的消耗。",
+        "minAction": "打开备忘录写下本周三件事"
+      },
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 70,
+        "conclusion": "去做，先理三件事再动第一件",
+        "minAction": "打开备忘录写下本周三件事",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "意愿6、精力5，状态够用；20分钟成本低，理清能缓解'什么都没做完'的失控感。先列三件再挑最重要的一件，收益远大于犹豫的消耗。"
+      },
+      "sceneId": "S3",
+      "sceneLabel": "实际执行行为——大建议接受但不执行，小建议经常真正完成",
+      "runIndex": 5
+    },
+    {
+      "success": true,
+      "label": "withMem",
+      "memoryInjected": "- 过去接受\"先做 30 分钟 XX\"这类建议 6 次，实际执行了 1 次；接受\"打开文档\"\"先看一个视频\"这类极小建议 7 次，执行了 6 次\n- 执行率高的建议有共同特征：minAction 在 1-5 分钟、不需要心理准备、可以随手开始\n- 一旦建议里出现\"先规划\"\"先列清单\"\"分三步\"这类带结构的词，执行率明显下降",
+      "rawJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 72,
+        "conclusion": "去做，但先只写一件，别列清单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你意愿和精力都在线，20分钟成本很低。但记忆里你7次极小建议执行了6次，带'列清单'的建议6次只做了1次——所以别整理三件，先写一件最重要的就够。",
+        "minAction": "打开备忘录，只写下一件最重要的事"
+      },
+      "finalJson": {
+        "shouldGo": true,
+        "agentSuggestIndex": 72,
+        "conclusion": "去做，但先只写一件，别列清单",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你意愿和精力都在线，20分钟成本很低。但记忆里你7次极小建议执行了6次，带'列清单'的建议6次只做了1次——所以别整理三件，先写一件最重要的就够。",
+        "minAction": "打开备忘录，只写下一件最重要的事"
+      },
+      "summary": {
+        "shouldGo": true,
+        "agentSuggestIndex": 72,
+        "conclusion": "去做，但先只写一件，别列清单",
+        "minAction": "打开备忘录，只写下一件最重要的事",
+        "persuadeMode": "理性分析模式",
+        "persuadeText": "你意愿和精力都在线，20分钟成本很低。但记忆里你7次极小建议执行了6次，带'列清单'的建议6次只做了1次——所以别整理三件，先写一件最重要的就够。"
+      },
+      "sceneId": "S3",
+      "sceneLabel": "实际执行行为——大建议接受但不执行，小建议经常真正完成",
+      "runIndex": 6
+    }
+  ]
+}

@@ -323,7 +323,7 @@ const categoryLabel: Record<string, string> = {
           <SketchBorder padding="2rem">
             <DualTextBlock
               :cn="session.conclusion"
-              :en="session.agentSuggestIndex >= 50 ? 'GO FOR IT NOW' : 'HOLD OFF TODAY'"
+              :en="session.conclusion?.startsWith('去做') ? 'GO FOR IT NOW' : 'HOLD OFF TODAY'"
               size="xl"
               highlight
             />

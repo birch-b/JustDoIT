@@ -91,7 +91,7 @@ const scoreLabel = computed(() => Math.round(currentScore.value));
       fill="#634442"
       font-size="28"
       font-weight="500"
-      font-family="Inter, sans-serif"
+      font-family="'Noto Serif SC', serif"
     >
       {{ scoreLabel }}
     </text>
@@ -101,7 +101,7 @@ const scoreLabel = computed(() => Math.round(currentScore.value));
       text-anchor="middle"
       fill="rgba(99,68,66,0.65)"
       font-size="11"
-      font-family="Inter, sans-serif"
+      font-family="'Noto Serif SC', serif"
     >
       行动指数
     </text>

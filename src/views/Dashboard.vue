@@ -648,7 +648,7 @@ function goLogin() {
               <!-- 行动指数：右上角，删除按钮在右下角不冲突 -->
               <span
                 class="shrink-0 text-2xl font-light font-en"
-                :class="card.agentSuggestIndex >= 50 ? 'opacity-100' : 'opacity-60'"
+                :class="card.conclusion?.startsWith('去做') ? 'opacity-100' : 'opacity-60'"
               >
                 {{ card.agentSuggestIndex }}
               </span>
