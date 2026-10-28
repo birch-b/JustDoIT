@@ -24,6 +24,8 @@ const router = useRouter();
 const store = useAgentStore();
 const todoStore = useTodoStore();
 const userStore = useUserStore();
+// 游客模式同步提醒用：模板里直接用响应式的登录态
+const isLoggedIn = computed(() => userStore.isLoggedIn);
 
 const sessionId = computed(() => Number(props.id));
 const session = ref<AgentSessionRes | undefined>(undefined);
@@ -79,11 +81,10 @@ const record = computed(() => store.getSessionWithTask(sessionId.value)?.record 
 const todoWasAdded = computed(() => record.value?.addToTodo === true);
 
 onMounted(async () => {
-  if (userStore.isLoggedIn) {
-    if (!todoStore.loaded) await todoStore.loadTodos();
-    // 归档记录也要拉：判断会话待办是否已归档（避免归档后误显示「未加入」）
-    void todoStore.loadArchived();
-  }
+  // 登录用户拉后端；游客由 store 内部转读浏览器本地存储
+  if (!todoStore.loaded) await todoStore.loadTodos();
+  // 归档记录也要拉：判断会话待办是否已归档（避免归档后误显示「未加入」）
+  void todoStore.loadArchived();
   const detail = await store.fetchHistory(sessionId.value);
   if (detail) {
     session.value = detail.session;
@@ -309,8 +310,8 @@ const categoryLabel: Record<string, string> = {
               <SketchCheckbox :size="b.size" :rotate="b.rotate" decorative />
             </div>
             <div class="mt-4 flex items-center justify-center gap-2">
-              <SketchCheckbox :size="16" decorative />
-              <span class="text-xs tracking-widest text-sketch-lineSub">
+               <SketchCheckbox :size="16" decorative />
+              <span class="text-sm tracking-widest text-sketch-lineSub">
                 行动指数 · {{ session.agentSuggestIndex }}
               </span>
             </div>
@@ -329,19 +330,19 @@ const categoryLabel: Record<string, string> = {
             />
             <div class="mt-4 flex items-center gap-3">
               <SketchCheckbox :size="18" decorative />
-              <span class="text-xs font-en tracking-widest text-sketch-lineSub">
+              <span class="text-sm font-en tracking-widest text-sketch-lineSub">
                 {{ session.persuadeMode }}
               </span>
             </div>
-            <p class="mt-4 text-sm font-light leading-relaxed">
+            <p class="mt-4 text-base font-light leading-relaxed">
               {{ session.persuadeText }}
             </p>
 
             <!-- 答案之书 -->
             <div v-if="session.answerBook" class="mt-5 sketch-border-l pl-3">
               <DualTextBlock cn="答案之书" en="ANSWER BOOK" size="sm" weight="normal" />
-              <p class="mt-1 text-sm font-light">「{{ session.answerBook }}」</p>
-              <p v-if="session.answerBookReading" class="mt-1 text-sm font-light leading-relaxed text-sketch-lineSub">
+              <p class="mt-1 text-base font-light">「{{ session.answerBook }}」</p>
+              <p v-if="session.answerBookReading" class="mt-1 text-base font-light leading-relaxed text-sketch-lineSub">
                 {{ session.answerBookReading }}
               </p>
             </div>
@@ -351,7 +352,7 @@ const categoryLabel: Record<string, string> = {
               <DualTextBlock cn="塔罗牌" en="TAROT" size="sm" weight="normal" />
               <div class="mt-2 border border-sketch-line/60 px-4 py-5 text-center">
                 <p class="text-lg font-light tracking-wide">{{ session.tarotCards[0] }}</p>
-                <p v-if="session.tarotReading" class="mt-3 text-sm font-light leading-relaxed text-sketch-lineSub">
+                <p v-if="session.tarotReading" class="mt-3 text-base font-light leading-relaxed text-sketch-lineSub">
                   {{ session.tarotReading }}
                 </p>
               </div>
@@ -360,10 +361,10 @@ const categoryLabel: Record<string, string> = {
             <!-- 今日天气 + 打分（勾选天气加成时才有） -->
             <div v-if="task?.weatherText && task.weatherScore" class="mt-5 sketch-border-l pl-3">
               <DualTextBlock cn="今日天气" en="TODAY'S WEATHER" size="sm" weight="normal" />
-              <p class="mt-1 text-sm font-light leading-relaxed">
+              <p class="mt-1 text-base font-light leading-relaxed">
                 <template v-if="task.weatherCity">{{ task.weatherCity }} · </template>{{ task.weatherText }}
               </p>
-              <p class="mt-1 text-sm font-light text-sketch-lineSub">
+              <p class="mt-1 text-base font-light text-sketch-lineSub">
                 当时给天气的打分：<span class="font-en">{{ task.weatherScore }}</span><span class="font-en">/10</span>
               </p>
             </div>
@@ -374,17 +375,17 @@ const categoryLabel: Record<string, string> = {
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <DualTextBlock cn="纠结内容" size="sm" weight="normal" />
-                <p class="mt-3 text-sm font-light">{{ task.taskContent }}</p>
+                <p class="mt-3 text-base font-light">{{ task.taskContent }}</p>
               </div>
               <div>
                 <DualTextBlock cn="分类 / 截止时间" size="sm" weight="normal" />
-                <p class="mt-3 text-sm font-light">
+                <p class="mt-3 text-base font-light">
                   {{ categoryLabel[task.category] || task.category }}<template v-if="task.deadline"> · {{ task.deadline.replace("T", " ") }}</template>
                 </p>
               </div>
             </div>
             <!-- 补充条件（可选，未填写则不展示） -->
-            <p v-if="task.extraContext" class="mt-3 text-sm font-light text-sketch-lineSub">
+            <p v-if="task.extraContext" class="mt-3 text-base font-light text-sketch-lineSub">
               补充条件：{{ task.extraContext }}
             </p>
           </div>
@@ -392,7 +393,7 @@ const categoryLabel: Record<string, string> = {
           <!-- 最小行动 -->
           <div>
             <DualTextBlock cn="最小行动" en="MINIMAL ACTION" size="sm" weight="normal" />
-            <p class="mt-2 text-base font-light leading-relaxed">
+            <p class="mt-2 text-lg font-light leading-relaxed">
               {{ session.minAction }}
             </p>
           </div>
@@ -402,7 +403,7 @@ const categoryLabel: Record<string, string> = {
             <DualTextBlock cn="你的决定与反馈" en="YOUR DECISION & FEEDBACK" size="md" weight="normal" />
 
             <!-- 反馈提交/入表失败：行内错误条 -->
-            <p v-if="feedbackError" class="mt-3 text-xs text-sketch-line border border-sketch-line/40 px-3 py-2">
+            <p v-if="feedbackError" class="mt-3 text-sm text-sketch-line border border-sketch-line/40 px-3 py-2">
               {{ feedbackError }}
             </p>
 
@@ -410,7 +411,7 @@ const categoryLabel: Record<string, string> = {
             <div v-if="!submitted" class="mt-4 space-y-4">
               <textarea
                 v-model="comment"
-                class="sketch-input w-full resize-none"
+                class="sketch-input w-full resize-none text-base"
                 rows="2"
                 maxlength="500"
                 :disabled="submitting || addingTodo"
@@ -430,56 +431,64 @@ const categoryLabel: Record<string, string> = {
                 </LinearButton>
               </div>
               <!-- 接受后追问：是否加入计划表 -->
-              <div v-else class="flex flex-wrap items-center gap-3">
-                <span class="text-sm font-light">要把这件事加入计划表吗？</span>
-                <span class="text-xs text-sketch-lineSub font-light">
-                  吃饭、出门这类即时决定可以不用加入
-                </span>
-                <LinearButton size="sm" :disabled="addingTodo || submitting" @click="confirmAddTodo">
-                  {{ addingTodo || submitting ? "提交中…" : "加入计划表" }}
-                </LinearButton>
-                <LinearButton size="sm" :disabled="addingTodo || submitting" @click="skipAddTodo">
-                  不用了
-                </LinearButton>
+              <div v-else class="flex flex-col gap-3">
+                <div class="flex flex-wrap items-center gap-3">
+                  <span class="text-base font-light">要把这件事加入计划表吗？</span>
+                  <span class="text-sm text-sketch-lineSub font-light">
+                    吃饭、出门这类即时决定可以不用加入
+                  </span>
+                </div>
+                <div class="flex gap-3">
+                  <LinearButton size="sm" :disabled="addingTodo || submitting" @click="confirmAddTodo">
+                    {{ addingTodo || submitting ? "提交中…" : "加入计划表" }}
+                  </LinearButton>
+                  <LinearButton size="sm" :disabled="addingTodo || submitting" @click="skipAddTodo">
+                    不用了
+                  </LinearButton>
+                </div>
               </div>
             </div>
 
             <!-- 已反馈：回显真实状态 -->
             <div v-else class="mt-4 space-y-4">
               <div class="flex flex-wrap gap-3">
-                <span class="border border-sketch-line/40 px-2 py-1 text-xs">
+                <span class="border border-sketch-line/40 px-2 py-1 text-sm">
                   {{ accepted ? "接受建议" : "拒绝建议" }}
                 </span>
-                <span v-if="record" class="border border-sketch-line/40 px-2 py-1 text-xs">
+                <span v-if="record" class="border border-sketch-line/40 px-2 py-1 text-sm">
                   {{ record.isExecute ? "已执行" : "未执行" }}
                 </span>
-                <span v-if="record?.actualCostMin" class="border border-sketch-line/40 px-2 py-1 text-xs">
+                <span v-if="record?.actualCostMin" class="border border-sketch-line/40 px-2 py-1 text-sm">
                   实际耗时 {{ record.actualCostMin }} min
                 </span>
-                <span v-if="record?.createdAt" class="text-[10px] text-sketch-lineSub font-en tracking-widest self-center">
+                <span v-if="record?.createdAt" class="text-xs text-sketch-lineSub font-en tracking-widest self-center">
                   {{ formatDate(record.createdAt) }}
                 </span>
               </div>
 
               <!-- 用户当时的留言 -->
-              <p v-if="comment" class="text-sm font-light text-sketch-lineSub">
+              <p v-if="comment" class="text-base font-light text-sketch-lineSub">
                 我的留言：{{ comment }}
               </p>
-              <p v-if="record?.executeResult" class="text-sm text-sketch-lineSub font-light">
+              <p v-if="record?.executeResult" class="text-base text-sketch-lineSub font-light">
                 {{ record.executeResult }}
               </p>
 
               <!-- Agent 收到决定后的二次回复 -->
               <div v-if="replyText" class="sketch-border-l">
                 <DualTextBlock cn="它的回应" en="REPLY" size="sm" weight="normal" />
-                <p class="mt-2 text-sm font-light leading-relaxed">
+                <p class="mt-2 text-base font-light leading-relaxed">
                   {{ replyText }}
                 </p>
               </div>
+              <!-- 回应缺失兜底：接口失败/限流或旧本地数据没有回应时显示 -->
+              <p v-else-if="!isLoggedIn" class="text-sm font-light text-sketch-lineSub">
+                本次没有生成回应，但你的决定已记下。
+              </p>
 
               <!-- 计划状态 -->
-              <div v-if="accepted" class="pt-3 sketch-border-t flex flex-wrap items-center gap-3">
-                <template v-if="inTodoList">
+              <div v-if="accepted" class="pt-3 sketch-border-t flex flex-col gap-3">
+                <div v-if="inTodoList" class="flex flex-wrap items-center gap-3">
                   <!-- 静态状态方框：done 或已归档显示对勾 -->
                   <svg width="18" height="18" viewBox="0 0 40 40" class="shrink-0">
                     <rect x="3" y="3" width="34" height="34" class="sketch-stroke" stroke-width="2.1" />
@@ -490,7 +499,7 @@ const categoryLabel: Record<string, string> = {
                       d="M11,21 L18,28 L30,14"
                     />
                   </svg>
-                  <span class="text-sm font-light">
+                  <span class="text-base font-light">
                     {{
                       displayedTodo
                         ? displayedTodo.done
@@ -502,29 +511,35 @@ const categoryLabel: Record<string, string> = {
                   <!-- 已归档标签：归档后仍保留评论，只加一个标记 -->
                   <span
                     v-if="linkedArchivedTodo"
-                    class="text-[10px] border border-sketch-line px-1.5 py-0.5 bg-sketch-bg"
+                    class="text-xs border border-sketch-line px-1.5 py-0.5 bg-sketch-bg"
                   >已归档</span>
+
+                  <!-- 游客模式同步提醒 -->
+                  <div v-if="!isLoggedIn" class="w-full mt-1 border border-sketch-line/40 px-3 py-2 text-sm font-light leading-relaxed text-sketch-lineSub">
+                    任务已存入本地。由于未登录，此任务不会同步到其他设备。
+                  </div>
+
                   <!-- 打卡感受与 Agent 回应：浅灰小字，整行折行显示（归档后仍保留） -->
                   <div
                     v-if="displayedTodo?.reflectionComment || displayedTodo?.reflectionReply"
                     class="mt-1 w-full space-y-0.5 pl-[30px]"
                   >
-                    <p v-if="displayedTodo?.reflectionComment" class="text-xs font-light text-sketch-lineSub">
+                    <p v-if="displayedTodo?.reflectionComment" class="text-sm font-light text-sketch-lineSub">
                       我的打卡感受：{{ displayedTodo.reflectionComment }}
                     </p>
-                    <p v-if="displayedTodo?.reflectionReply" class="text-xs font-light text-sketch-lineSub">
+                    <p v-if="displayedTodo?.reflectionReply" class="text-sm font-light text-sketch-lineSub">
                       它的回应：{{ displayedTodo.reflectionReply }}
                     </p>
                   </div>
-                </template>
-                <template v-else>
-                  <span class="text-sm font-light text-sketch-lineSub">
+                </div>
+                <div v-else class="flex flex-wrap items-center gap-3">
+                  <span class="text-base font-light text-sketch-lineSub">
                     {{ todoWasAdded ? "该待办已删除，可以重新加入计划表。" : "这条建议没有进入计划表。" }}
                   </span>
                   <LinearButton size="sm" :disabled="reAdding" @click="reAddTodo">
                     {{ reAdding ? "加入中…" : "加入计划表" }}
                   </LinearButton>
-                </template>
+                </div>
               </div>
             </div>
           </SketchBorder>

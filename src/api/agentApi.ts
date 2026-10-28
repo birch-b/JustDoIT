@@ -15,6 +15,48 @@ import { authRequest } from "./http";
 
 const BASE_URL = "/api/agent";
 
+/** 游客迁移：单条会话导入项（session.sessionId 为本地负数 ID，后端忽略并按 oldId 发新号） */
+export interface GuestImportItem {
+  oldId: number;
+  task: TaskCreateReq;
+  session: AgentSessionRes;
+  record: ActionRecord | null;
+  createdAt: string;
+}
+
+/** 游客迁移：导入结果（新旧会话 ID 映射） */
+export interface GuestImportRes {
+  mappings: { oldId: number; newSessionId: number }[];
+}
+
+/** 游客反馈二次回复入参（会话不落库，上下文由前端带回） */
+export interface GuestFeedbackReplyReq {
+  taskContent: string;
+  category: string;
+  conclusion: string;
+  persuadeMode: string;
+  persuadeText: string;
+  minAction: string;
+  accepted: boolean;
+  addToTodo: boolean;
+  comment?: string;
+}
+
+/** 公开 POST 小助手：游客 LLM 接口共用；网络/限流失败返回 null 而非抛错 */
+async function publicPost<T>(url: string, body: unknown): Promise<T | null> {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return null;
+    return (await res.json().catch(() => null)) as T | null;
+  } catch {
+    return null;
+  }
+}
+
 /** 塔罗牌（后端真实返回结构） */
 export interface TarotCardRes {
   cardName: string;
@@ -31,6 +73,64 @@ export const agentApi = {
     return authRequest<AgentSessionRes>(`${BASE_URL}/session/create`, {
       method: "POST",
       body: JSON.stringify(req),
+    });
+  },
+
+  /**
+   * 游客创建会话：POST /agent/session/guest-create（公开，后端按 IP 限流，只算不存库）
+   * 返回的 sessionId 无意义，由前端换成本地负数 ID
+   */
+  async createGuestSession(req: TaskCreateReq): Promise<AgentSessionRes> {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE_URL}/session/guest-create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req),
+      });
+    } catch {
+      throw new Error("无法连接服务器，请确认后端已启动");
+    }
+    const data = (await res.json().catch(() => null)) as
+      | (AgentSessionRes & { message?: string | string[] })
+      | null;
+    if (!res.ok) {
+      const msg = data?.message;
+      throw new Error(
+        Array.isArray(msg) ? msg.join("；") : msg || `请求失败 ${res.status}`
+      );
+    }
+    return data as AgentSessionRes;
+  },
+
+  /**
+   * 游客反馈二次回复：POST /agent/session/guest-reply（公开，共享限流）
+   * 会话不落库，上下文随请求带回；失败返回 null，由调用方降级
+   */
+  guestFeedbackReply(req: GuestFeedbackReplyReq): Promise<{ reply: string } | null> {
+    return publicPost<{ reply: string }>(`${BASE_URL}/session/guest-reply`, req);
+  },
+
+  /**
+   * 游客打卡回应：POST /agent/session/guest-checkin-reply（公开，共享限流）
+   * 待办不落库；失败返回 null，由调用方降级
+   */
+  guestCheckinReply(req: {
+    taskContent: string;
+    category: string;
+    comment?: string;
+  }): Promise<{ reply: string } | null> {
+    return publicPost<{ reply: string }>(`${BASE_URL}/session/guest-checkin-reply`, req);
+  },
+
+  /**
+   * 游客会话导入：POST /agent/session/import（需登录）
+   * 登录成功后把浏览器本地会话原样落库（后端不调 LLM、不重算），返回新旧 ID 映射
+   */
+  importGuestSessions(items: GuestImportItem[]): Promise<GuestImportRes> {
+    return authRequest<GuestImportRes>(`${BASE_URL}/session/import`, {
+      method: "POST",
+      body: JSON.stringify({ items }),
     });
   },
 

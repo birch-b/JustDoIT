@@ -26,7 +26,7 @@ const store = useAgentStore();
 const userStore = useUserStore();
 const todoStore = useTodoStore();
 
-// 是否已登录：首页对访客公开但不展示任何数据
+// 是否已登录：首页对访客公开，游客数据来自浏览器本地存储
 const isLoggedIn = computed(() => userStore.isLoggedIn);
 
 // 已完成区折叠状态：hover 预览展开 / 点击钉住（composable 统一交互）
@@ -42,18 +42,13 @@ const doneDrawers = useHoverPinDrawerGroup();
 const todoToRemove = ref<{ id: number; taskContent: string } | null>(null);
 // 归档确认弹窗
 const showArchiveConfirm = ref(false);
-// 待办是否全部为空（未登录时也视为空，不展示本地数据；加载失败不算空）
+// 待办是否全部为空（游客读本地数据；加载失败不算空）
 // 归档记录不在首页展示（在统计页查看）：全部归档后首页计划表即为「清空」状态
 const todoIsEmpty = computed(
-  () => !isLoggedIn.value || (!todoStore.loadError && todoStore.list.length === 0)
+  () => !todoStore.loadError && todoStore.list.length === 0
 );
-// 未登录时计数显示 0
-const pendingCount = computed(() =>
-  isLoggedIn.value ? todoStore.pendingCount : 0
-);
-const doneCount = computed(() =>
-  isLoggedIn.value ? todoStore.doneList.length : 0
-);
+const pendingCount = computed(() => todoStore.pendingCount);
+const doneCount = computed(() => todoStore.doneList.length);
 
 // 纠结分类中文名映射
 const categoryLabel: Record<string, string> = {
@@ -70,14 +65,9 @@ const categoryLabel: Record<string, string> = {
 };
 
 onMounted(() => {
-  // 登录后拉真实数据；未登录清空，不注入 mock
-  if (isLoggedIn.value) {
-    store.loadSessions();
-    todoStore.loadTodos();
-  } else {
-    store.resetSessions();
-    todoStore.resetTodos();
-  }
+  // 登录用户拉后端；游客由 store 内部转读浏览器本地存储
+  store.loadSessions();
+  todoStore.loadTodos();
 });
 
 const cards = computed(() => store.cardList);
@@ -145,6 +135,7 @@ async function doReflect(comment: string) {
     const updated = await todoStore.reflectDone(reflectTodo.value.id, comment);
     reflectResult.value = {
       comment,
+      // 回应缺失兜底（接口失败/限流）：游客与登录用户同一文案
       reply: updated.reflectionReply || "做完就好，这次先记下。",
     };
   } catch (e) {
@@ -156,7 +147,6 @@ async function doReflect(comment: string) {
 
 // 到点询问「做了吗」：取最早到期的一条，在首页顶部弹卡；「做了」走打卡弹窗，「还没」顺延
 const dueTodo = computed(() => {
-  if (!isLoggedIn.value) return null;
   const now = Date.now();
   return (
     todoStore.pendingList
@@ -262,8 +252,8 @@ async function doBatchDelete() {
   batchError.value = "";
   try {
     await store.batchDeleteSessions([...selectedIds.value]);
-    // 关联待办可能已被后端清理，同步计划表
-    if (isLoggedIn.value) await todoStore.loadTodos();
+    // 关联待办已被级联清理（游客为本地清理），同步计划表
+    await todoStore.loadTodos();
     confirmOpen.value = false;
     exitSelect();
   } catch (e) {
@@ -284,21 +274,22 @@ function formatDate(iso: string): string {
   return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-// 访客点击任意功能：跳登录并带回跳地址，登录页提示“请先登录”
+// 访客点击需登录功能（统计）：跳登录并带回跳地址，登录页提示“请先登录”
 function requireLogin(): boolean {
   if (isLoggedIn.value) return true;
   router.push({ name: "login", query: { redirect: route.fullPath } });
   return false;
 }
 
+// 新决策与会话详情对游客开放（免登录体验）
 function goCreate() {
-  if (requireLogin()) router.push("/task-create");
+  router.push("/task-create");
 }
 function goStats() {
   if (requireLogin()) router.push("/stats");
 }
 function goSession(id: number) {
-  if (requireLogin()) router.push(`/session/${id}`);
+  router.push(`/session/${id}`);
 }
 function goLogin() {
   router.push({ name: "login", query: { redirect: route.fullPath } });
@@ -361,23 +352,34 @@ function goLogin() {
     <section class="mb-12">
       <div class="flex items-end justify-between mb-6 pb-3 sketch-border-b">
         <DualTextBlock cn="我的计划表" en="TO DO LIST" size="md" weight="normal" />
-        <span class="text-xs text-sketch-lineSub tracking-widest">
+        <span class="text-sm text-sketch-lineSub tracking-widest">
           {{ pendingCount }} 待完成 · {{ doneCount }} 已完成
         </span>
       </div>
 
+      <!-- 游客模式提醒：数据不互通（恒显示，让游客明确当前身份） -->
+      <div v-if="!isLoggedIn" class="mb-6">
+        <SketchBorder padding="1rem" class="bg-sketch-accent/5">
+          <div class="flex items-center gap-3">
+            <div class="flex-1 text-sm font-light leading-relaxed">
+              您当前以游客身份使用，会话与计划仅保存在这台设备的浏览器里。更换设备或清理缓存将导致数据丢失。
+            </div>
+            <LinearButton size="sm" @click="goLogin">
+              <span>立即登录同步</span>
+            </LinearButton>
+          </div>
+        </SketchBorder>
+      </div>
+
       <!-- 全空状态 -->
-      <div v-if="todoIsEmpty" class="flex flex-col items-center justify-center py-10 text-center text-sm text-sketch-lineSub font-light">
+      <div v-if="todoIsEmpty" class="flex flex-col items-center justify-center py-10 text-center text-base text-sketch-lineSub font-light">
         <SketchCheckbox :size="32" decorative />
-        <p class="mt-3">{{ isLoggedIn ? "还没有待办事项，去结果页加入计划吧～" : "登录后查看你的计划表" }}</p>
-        <LinearButton v-if="!isLoggedIn" size="md" class="mt-4" @click="goLogin">
-          <span>去登录</span>
-        </LinearButton>
+        <p class="mt-3">还没有待办事项，去结果页加入计划吧～</p>
       </div>
 
       <!-- 加载失败：给重试入口，不误显示成「没有待办」 -->
       <div v-else-if="isLoggedIn && todoStore.loadError" class="py-6 text-center">
-        <p class="text-sm font-light text-sketch-lineSub">计划拉取失败，可能是网络抖动。</p>
+        <p class="text-base font-light text-sketch-lineSub">计划拉取失败，可能是网络抖动。</p>
         <LinearButton size="sm" class="mt-3" @click="todoStore.loadTodos()">重新加载</LinearButton>
       </div>
 
@@ -400,21 +402,21 @@ function goLogin() {
               />
               <!-- 内容 -->
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-light leading-snug">
+                <p class="text-base font-light leading-snug">
                   {{ todo.taskContent }}
                 </p>
                 <div class="mt-2 flex flex-wrap items-center gap-2">
                   <SketchChip tag>
                     {{ categoryLabel[todo.category] || todo.category }}
                   </SketchChip>
-                  <span v-if="todo.deadline" class="text-[10px] text-sketch-lineSub font-en tracking-wide">
+                  <span v-if="todo.deadline" class="text-xs text-sketch-lineSub font-en tracking-wide">
                     📅 {{ todo.deadline.slice(0, 10) }}
                   </span>
                 </div>
               </div>
               <!-- 移出计划表 -->
               <button
-                class="text-sketch-lineSub hover:text-sketch-line text-sm shrink-0"
+                class="text-sketch-lineSub hover:text-sketch-line text-base shrink-0"
                 @click="askRemoveTodo(todo)"
                 aria-label="移出计划表"
               >
@@ -428,7 +430,7 @@ function goLogin() {
         <div v-if="todoStore.doneList.length" class="mt-6" @mouseleave="onDoneSectionLeave">
           <div class="flex items-center justify-between">
             <button
-              class="flex items-center gap-2 text-xs text-sketch-lineSub hover:text-sketch-line"
+              class="flex items-center gap-2 text-sm text-sketch-lineSub hover:text-sketch-line"
               @click="toggleDoneSection"
               @mouseenter="onDoneSectionEnter"
             >
@@ -436,7 +438,7 @@ function goLogin() {
               <span>已完成 {{ todoStore.doneList.length }} 项</span>
             </button>
             <button
-              class="text-[11px] text-sketch-lineSub hover:text-sketch-line"
+              class="text-xs text-sketch-lineSub hover:text-sketch-line"
               @click="askArchiveDone"
             >
               归档已完成
@@ -459,9 +461,9 @@ function goLogin() {
                     class="inline-flex items-center text-sketch-lineSub transition-transform duration-300"
                     :style="{ transform: doneDrawers.isOpen(g.key) ? 'rotate(90deg)' : 'rotate(0deg)' }"
                   ><SketchCaret :size="10" /></span>
-                  <span class="text-xs font-light text-sketch-lineSub">{{ g.label }}</span>
+                  <span class="text-sm font-light text-sketch-lineSub">{{ g.label }}</span>
                 </span>
-                <span class="text-[10px] text-sketch-lineSub font-en tracking-widest">{{ g.list.length }}</span>
+                <span class="text-xs text-sketch-lineSub font-en tracking-widest">{{ g.list.length }}</span>
               </button>
 
               <!-- 该分类下的已完成待办 -->
@@ -479,7 +481,7 @@ function goLogin() {
                     @update:model-value="todoStore.toggleDone(todo.id)"
                   />
                   <div class="flex-1 min-w-0">
-                    <p class="text-sm font-light line-through truncate">
+                    <p class="text-base font-light line-through truncate">
                       {{ todo.taskContent }}
                     </p>
                     <!-- 打卡感受与 Agent 回应：浅灰小字 -->
@@ -487,10 +489,10 @@ function goLogin() {
                       v-if="todo.reflectionComment || todo.reflectionReply"
                       class="mt-1 space-y-0.5"
                     >
-                      <p v-if="todo.reflectionComment" class="text-xs font-light text-sketch-lineSub">
+                      <p v-if="todo.reflectionComment" class="text-sm font-light text-sketch-lineSub">
                         我：{{ todo.reflectionComment }}
                       </p>
-                      <p v-if="todo.reflectionReply" class="text-xs font-light text-sketch-lineSub">
+                      <p v-if="todo.reflectionReply" class="text-sm font-light text-sketch-lineSub">
                         Agent：{{ todo.reflectionReply }}
                       </p>
                     </div>
@@ -526,7 +528,7 @@ function goLogin() {
             {{ cards.length }} 条
           </span>
           <button
-            v-if="isLoggedIn && !isEmpty && !sessionLoadFailed"
+            v-if="!isEmpty && !sessionLoadFailed"
             class="text-xs text-sketch-lineSub hover:text-sketch-line whitespace-nowrap opacity-70 hover:opacity-100 transition-opacity"
             @click="enterSelect"
           >
@@ -582,13 +584,12 @@ function goLogin() {
         <SketchBorder padding="2.5rem 3rem" class="max-w-sm">
           <SketchClock :score="0" :size="150" :animated="false" />
           <DualTextBlock
-            :cn="isLoggedIn ? '还没有任何决策记录' : '登录后查看你的决策记录'"
-            :en="isLoggedIn ? 'No sessions yet. Start your first decision.' : 'LOGIN TO VIEW YOUR SESSIONS.'"
+            cn="还没有任何决策记录"
+            en="No sessions yet. Start your first decision."
             size="md"
           />
           <div class="mt-6">
-            <LinearButton v-if="isLoggedIn" size="md" @click="goCreate">开始第一次决策</LinearButton>
-            <LinearButton v-else size="md" @click="goLogin">去登录</LinearButton>
+            <LinearButton size="md" @click="goCreate">开始第一次决策</LinearButton>
           </div>
         </SketchBorder>
       </div>

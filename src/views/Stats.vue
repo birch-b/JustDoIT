@@ -329,7 +329,7 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
             :style="{ animationDelay: `${t.delay}s` }"
           />
         </svg>
-        <p class="mt-1 text-[9px] text-sketch-lineSub tracking-widest">
+        <p class="mt-1 text-xs text-sketch-lineSub tracking-widest">
           1 格 = 5% · 涂色 = 已执行
         </p>
       </SketchBorder>
@@ -346,8 +346,8 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
               :x="ROW_X0 - 12"
               :y="row.y + 4"
               text-anchor="end"
-              :fill="row.hero ? HERO_DEEP : MUT"
-              font-size="9.5"
+              :fill="row.hero ? HERO_DEEP : INK"
+              font-size="11"
               font-weight="600"
               font-family="'Noto Serif SC', serif"
             >{{ row.mode }}</text>
@@ -381,14 +381,14 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
             <text
               :x="row.labelX"
               :y="row.y + 5"
-              font-size="12"
+              font-size="14"
               font-weight="800"
               :fill="row.hero ? HERO_DEEP : INK"
               font-family="'Noto Serif SC', serif"
             >{{ row.count }}</text>
           </g>
           <text
-            x="238" y="258" text-anchor="middle" font-size="7.5" font-weight="600"
+            x="238" y="258" text-anchor="middle" font-size="10" font-weight="600"
             :fill="FAINT" font-family="'Noto Serif SC', serif" letter-spacing="0.12em"
           >每格 = 一次会话 · 第 5 个标点</text>
         </svg>
@@ -399,7 +399,7 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
         <div class="flex items-start justify-between gap-3">
           <DualTextBlock cn="意愿分数与执行" en="WILL SCORE × EXECUTION" size="md" weight="normal" />
           <!-- 图例：实心=已执行，空心=未执行 -->
-          <div class="flex shrink-0 items-center gap-3 pt-1 text-[10px] text-sketch-lineSub">
+          <div class="flex shrink-0 items-center gap-3 pt-1 text-xs text-sketch-lineSub">
             <span class="flex items-center gap-1.5 whitespace-nowrap">
               <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
                 <path :d="sketchCirclePath(7, 7, 5, 101)" :fill="HERO_DEEP" :stroke="HERO_DEEP" stroke-width="0.8" stroke-linejoin="round" />
@@ -419,7 +419,7 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
           <!-- 空状态 -->
           <div v-if="willChart.empty" class="flex h-[250px] flex-col items-center justify-center text-center">
             <SketchCheckbox :size="30" decorative />
-            <p class="mt-3 text-sm font-light text-sketch-lineSub">
+            <p class="mt-3 text-base font-light text-sketch-lineSub">
               还没有真实执行反馈，去结果页记录你的行动吧
             </p>
           </div>
@@ -434,14 +434,14 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
               />
               <text
                 :x="BUB_X0 - 9" :y="t.y + 2.5" text-anchor="end"
-                :fill="t.k === 0 ? MUT : FAINT" font-size="7" font-weight="600"
+                :fill="t.k === 0 ? MUT : FAINT" font-size="9" font-weight="600"
                 font-family="'Noto Serif SC', serif"
               >{{ t.k }}</text>
             </g>
             <!-- y 轴标题 -->
             <text
               :x="BUB_X0 - 26" :y="BUB_TOP - 6" text-anchor="middle"
-              :fill="MUT" font-size="7.5" font-weight="600"
+              :fill="MUT" font-size="10" font-weight="600"
               font-family="'Noto Serif SC', serif"
             >次数</text>
 
@@ -464,12 +464,12 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
               :y="BUB_BASE + 20"
               text-anchor="middle"
               :fill="c.long ? MUT : FAINT"
-              font-size="7.5" font-weight="600"
+              font-size="10" font-weight="600"
               font-family="'Noto Serif SC', serif"
             >{{ c.w }}</text>
             <text
               :x="(BUB_X0 + BUB_X1) / 2" :y="BUB_BASE + 34" text-anchor="middle"
-              :fill="MUT" font-size="8" font-weight="600"
+              :fill="MUT" font-size="11" font-weight="600"
               font-family="'Noto Serif SC', serif" letter-spacing="0.05em"
             >意愿分数 · 1 不想做 → 10 很想做</text>
 
@@ -508,14 +508,14 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
           ><SketchCaret :size="12" /></span>
           <DualTextBlock cn="归档记录" en="ARCHIVED" size="md" weight="normal" />
         </span>
-        <span class="text-xs text-sketch-lineSub tracking-widest">
+        <span class="text-sm text-sketch-lineSub tracking-widest">
           {{ todoStore.archivedList.length }} 条
         </span>
       </button>
 
       <SketchCollapse :open="showArchived">
       <div class="mt-4 space-y-2">
-        <div v-if="!todoStore.archivedList.length" class="text-sm font-light text-sketch-lineSub">
+        <div v-if="!todoStore.archivedList.length" class="text-base font-light text-sketch-lineSub">
           还没有归档记录——在首页计划表点「归档已完成」，清掉的待办会收在这里
         </div>
 
@@ -533,7 +533,7 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
               :style="{ transform: isArchivedOpen(group.category) ? 'rotate(90deg)' : 'rotate(0deg)' }"
             ><SketchCaret :size="10" /></span>
             <SketchChip tag>{{ categoryLabel[group.category] || group.category }}</SketchChip>
-            <span class="text-xs text-sketch-lineSub font-en tracking-widest ml-auto">
+            <span class="text-sm text-sketch-lineSub font-en tracking-widest ml-auto">
               {{ group.items.length }}
             </span>
           </button>
@@ -545,18 +545,18 @@ const decos: BoxDeco[] = [{ top: "12%", left: "3%", rotate: -10, size: 28 }];
               :key="todo.id"
               class="flex items-center gap-3 px-1 py-2 opacity-60"
             >
-              <p class="flex-1 min-w-0 truncate text-sm font-light line-through">
+              <p class="flex-1 min-w-0 truncate text-base font-light line-through">
                 {{ todo.taskContent }}
               </p>
               <span
                 v-if="todo.completedAt"
-                class="shrink-0 text-[10px] text-sketch-lineSub font-en tracking-wide"
+                class="shrink-0 text-xs text-sketch-lineSub font-en tracking-wide"
               >
                 {{ todo.completedAt.slice(0, 10) }}
               </span>
               <button
                 type="button"
-                class="shrink-0 pr-2 text-xs text-sketch-lineSub transition-colors hover:text-sketch-line"
+                class="shrink-0 pr-2 text-sm text-sketch-lineSub transition-colors hover:text-sketch-line"
                 title="删除这条归档记录"
                 @click="archivedToRemove = todo"
               >

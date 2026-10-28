@@ -123,7 +123,8 @@ export class TodoService {
     return new Date(from.getTime() + DEFAULT_CHECKIN_MS);
   }
 
-  private async generateCheckinReply(
+  /** 打卡回应生成（public：游客接口 guest-checkin-reply 也走这里，不落库） */
+  async generateCheckinReply(
     taskContent: string,
     category: string,
     comment: string,

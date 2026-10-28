@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 import { userApi, type AuthRes, type UserPreference } from "@/api/userApi";
 import { useAgentStore } from "@/store/agentStore";
 import { useTodoStore } from "@/store/todoStore";
+import { migrateGuestData } from "@/utils/guestMigration";
 
 export interface UserInfo {
   id?: number;
@@ -131,6 +132,7 @@ export const useUserStore = defineStore("user", {
       try {
         const res = await userApi.register(payload);
         this.setAuth(res);
+        await this.syncGuestData();
         return { ok: true, msg: "注册成功" };
       } catch (e) {
         return { ok: false, msg: (e as Error).message };
@@ -148,10 +150,23 @@ export const useUserStore = defineStore("user", {
           password: payload.password,
         });
         this.setAuth(res);
+        await this.syncGuestData();
         return { ok: true, msg: "登录成功" };
       } catch (e) {
         return { ok: false, msg: (e as Error).message };
       }
+    },
+
+    /**
+     * 登录/注册成功后：迁移浏览器里的游客数据（会话+待办）到当前账号，再刷新业务 store。
+     * 迁移内部静默失败（中断保留、下次登录重试），绝不阻塞登录流程。
+     */
+    async syncGuestData() {
+      await migrateGuestData();
+      await Promise.all([
+        useAgentStore().loadSessions(),
+        useTodoStore().loadTodos(),
+      ]);
     },
 
     /** 退出登录：清登录态 + 清空业务数据内存（数据均在后端） */

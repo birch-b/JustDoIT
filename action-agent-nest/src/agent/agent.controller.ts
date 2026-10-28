@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpException, HttpStatus, Ip, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { AnswerBookService } from './answerbook.service';
 import { TarotService, TarotResult } from './tarot.service';
 import { WeatherService, WeatherInfo } from './weather.service';
@@ -8,8 +8,29 @@ import { AgentService } from './agent.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { ActionRecordDto } from './dto/action-record.dto';
 import { BatchDeleteSessionsDto } from './dto/batch-delete-sessions.dto';
+import { ImportGuestSessionsDto } from './dto/import-guest-sessions.dto';
+import { GuestCheckinReplyDto, GuestFeedbackReplyDto } from './dto/guest-feedback-reply.dto';
+import { TodoService } from './todo.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { GetUser } from '../common/decorators/get-user.decorator';
+
+// ── 游客 LLM 接口限流：每 IP 每日 30 次（内存滑动窗口，单实例部署够用）──
+// 覆盖 创建会话/反馈二次回复/打卡回应 三个公开接口，共享同一额度挡住刷接口的滥用；登录接口不受影响
+const GUEST_RATE_LIMIT = 30;
+const GUEST_RATE_WINDOW_MS = 24 * 60 * 60 * 1000;
+const guestRateMap = new Map<string, number[]>();
+
+function checkGuestRate(ip: string): boolean {
+  const now = Date.now();
+  const hits = (guestRateMap.get(ip) ?? []).filter((t) => now - t < GUEST_RATE_WINDOW_MS);
+  if (hits.length >= GUEST_RATE_LIMIT) {
+    guestRateMap.set(ip, hits);
+    return false;
+  }
+  hits.push(now);
+  guestRateMap.set(ip, hits);
+  return true;
+}
 
 @Controller('agent')
 export class AgentController {
@@ -20,6 +41,7 @@ export class AgentController {
     private readonly cityService: CityService,
     private readonly placeService: PlaceService,
     private readonly agentService: AgentService,
+    private readonly todoService: TodoService,
   ) {}
 
   /**
@@ -97,6 +119,69 @@ export class AgentController {
   @Post('session/create')
   async createSession(@GetUser('userId') userId: number, @Body() dto: CreateSessionDto) {
     return this.agentService.createSession(userId, dto);
+  }
+
+  /**
+   * 游客创建会话：POST /api/agent/session/guest-create（公开，每 IP 每日 10 次）
+   * 只算不存库，sessionId 由前端本地发号；游客数据全部存在浏览器
+   */
+  @Post('session/guest-create')
+  async createGuestSession(@Ip() ip: string, @Body() dto: CreateSessionDto) {
+    if (!checkGuestRate(ip)) {
+      throw new HttpException(
+        '游客体验次数已用完（每日 30 次），登录后可无限使用',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    return this.agentService.createGuestSession(dto);
+  }
+
+  /**
+   * 游客反馈二次回复：POST /api/agent/session/guest-reply（公开，共享限流）
+   * 会话不落库，上下文由前端随请求带回，LLM 失败返回兜底文案
+   */
+  @Post('session/guest-reply')
+  async guestFeedbackReply(@Ip() ip: string, @Body() dto: GuestFeedbackReplyDto) {
+    if (!checkGuestRate(ip)) {
+      throw new HttpException(
+        '游客体验次数已用完（每日 30 次），登录后可无限使用',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    return this.agentService.guestFeedbackReply(dto);
+  }
+
+  /**
+   * 游客打卡回应：POST /api/agent/session/guest-checkin-reply（公开，共享限流）
+   * 待办不落库，仅按 任务内容+打卡感受 生成一句回应
+   */
+  @Post('session/guest-checkin-reply')
+  async guestCheckinReply(@Ip() ip: string, @Body() dto: GuestCheckinReplyDto) {
+    if (!checkGuestRate(ip)) {
+      throw new HttpException(
+        '游客体验次数已用完（每日 30 次），登录后可无限使用',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    const reply = await this.todoService.generateCheckinReply(
+      dto.taskContent,
+      dto.category,
+      (dto.comment ?? '').trim(),
+    );
+    return { reply };
+  }
+
+  /**
+   * 游客会话导入：POST /api/agent/session/import（需登录）
+   * 登录成功后前端把浏览器本地会话原样写入当前用户名下，返回新旧 ID 映射
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('session/import')
+  async importGuestSessions(
+    @GetUser('userId') userId: number,
+    @Body() dto: ImportGuestSessionsDto,
+  ) {
+    return this.agentService.importGuestSessions(userId, dto);
   }
 
   /** 历史会话列表：GET /api/agent/sessions（需登录） */

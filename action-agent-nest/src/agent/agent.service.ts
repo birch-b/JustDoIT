@@ -1,12 +1,15 @@
 // Agent 核心业务：创建会话（行动指数/劝说模式/神秘加成）、查询、历史、行为反馈
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, DataSource } from 'typeorm';
 import { Task } from './entities/task.entity';
 import { TaskSession } from './entities/task-session.entity';
 import { ActionRecord } from './entities/action-record.entity';
+import { Todo } from './entities/todo.entity';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { ActionRecordDto } from './dto/action-record.dto';
+import { ImportGuestSessionsDto } from './dto/import-guest-sessions.dto';
+import { GuestFeedbackReplyDto } from './dto/guest-feedback-reply.dto';
 import { AnswerBookService } from './answerbook.service';
 import { TarotService } from './tarot.service';
 import { TodoService } from './todo.service';
@@ -46,6 +49,7 @@ export class AgentService {
     private readonly llmMemoryService: LlmMemoryService,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    private readonly dataSource: DataSource,
   ) {}
 
   /** 创建会话：取历史 → 保存任务 → 计算建议 → 神秘加成 → 保存会话 */
@@ -92,6 +96,178 @@ export class AgentService {
     // 2.5 读取用户冷启动偏好问卷（用户主动填写的兴趣/纠结点/决策风格/价值观）
     const preferenceText = await this.buildPreferenceText(userId);
 
+    // 3-4. 神秘加成 + LLM 建议（与游客创建共用同一套计算）
+    const computed = await this.computeAdvice(dto, {
+      historySummary,
+      memoryText,
+      preferenceText,
+      lastSession: lastSession
+        ? {
+            taskContent: lastSession.task.taskContent,
+            category: lastSession.task.category,
+            conclusion: lastSession.conclusion,
+          }
+        : undefined,
+    });
+
+    // 5. 保存会话（historySummary 在读取时动态生成，不存固定值）
+    const session = this.sessionRepo.create({
+      taskId: savedTask.id,
+      agentSuggestIndex: computed.agentSuggestIndex,
+      conclusion: computed.conclusion,
+      persuadeMode: computed.persuadeMode,
+      persuadeText: computed.persuadeText,
+      minAction: computed.minAction,
+      taroCard: computed.tarotCards ? computed.tarotCards[0] : null,
+      tarotCards: computed.tarotCards ? JSON.stringify(computed.tarotCards) : null,
+      tarotReading: computed.tarotReading,
+      answerBook: computed.answerBook,
+      answerBookReading: computed.answerBookReading,
+    });
+    const savedSession = await this.sessionRepo.save(session);
+
+    // 复用开头算好的历史摘要只喂 prompt，不再随响应返回（页面展示已移除，避免与关键词重叠）
+    return this.toSessionRes(savedSession, computed.tarotCards, computed.answerBook);
+  }
+
+  /**
+   * 游客创建会话：与 createSession 共用同一套 LLM 计算，但只算不存库、无个性化上下文
+   * （游客没有历史摘要/长期记忆/偏好问卷/上次结论）。
+   * sessionId 返回 0，由前端换成本地负数 ID。
+   */
+  async createGuestSession(dto: CreateSessionDto) {
+    const computed = await this.computeAdvice(dto, {
+      historySummary: '',
+      memoryText: '',
+      preferenceText: '',
+    });
+    return {
+      sessionId: 0,
+      agentSuggestIndex: computed.agentSuggestIndex,
+      conclusion: computed.conclusion,
+      persuadeMode: computed.persuadeMode,
+      persuadeText: computed.persuadeText,
+      minAction: computed.minAction,
+      taroCard: computed.tarotCards?.[0],
+      tarotCards: computed.tarotCards,
+      tarotReading: computed.tarotReading ?? undefined,
+      answerBook: computed.answerBook ?? undefined,
+      answerBookReading: computed.answerBookReading ?? undefined,
+    };
+  }
+
+  /**
+   * 游客反馈二次回复：会话不落库，上下文由前端随请求带回，与登录用户共用同一套 prompt。
+   * 失败走本地兜底文案，保证前端总有回应。
+   */
+  async guestFeedbackReply(dto: GuestFeedbackReplyDto): Promise<{ reply: string }> {
+    const messages = buildFeedbackReplyPrompt({
+      taskContent: dto.taskContent,
+      category: dto.category,
+      conclusion: dto.conclusion,
+      persuadeMode: dto.persuadeMode,
+      persuadeText: dto.persuadeText,
+      minAction: dto.minAction,
+      accepted: dto.accepted,
+      addToTodo: dto.addToTodo,
+      comment: (dto.comment ?? '').trim(),
+    });
+    const reply = await this.llmService.chatText(messages, 0.7);
+    if (reply) return { reply };
+    if (!dto.accepted) {
+      return { reply: '好，那就先按你自己的节奏来，下次纠结随时找我。' };
+    }
+    return {
+      reply: dto.addToTodo
+        ? '决定了就别反悔，按最小行动先开始第一步，我在这儿等你的完成打卡。'
+        : '行，说走就走，先行动起来吧。',
+    };
+  }
+
+  /**
+   * 游客会话导入：登录成功后把浏览器本地会话原样落库到当前用户名下。
+   * 不调 LLM、不重新计算（重放 createSession 会产生不同建议，破坏用户已看到的结果），
+   * 只写 task / task_session / action_record 三张表，返回新旧会话 ID 映射供前端迁待办。
+   */
+  async importGuestSessions(userId: number, dto: ImportGuestSessionsDto) {
+    const mappings: { oldId: number; newSessionId: number }[] = [];
+    for (const item of dto.items) {
+      const savedSession = await this.dataSource.transaction(async (manager) => {
+        const task = manager.create(Task, {
+          userId,
+          taskContent: item.task.taskContent,
+          category: item.task.category,
+          willScore: item.task.willScore,
+          energyScore: item.task.energyScore,
+          importance: item.task.importance,
+          expectCostMin: item.task.expectCostMin ?? null,
+          deadline: item.task.deadline ?? null,
+          location: item.task.location ?? '',
+          enableTarot: !!item.task.enableTarot,
+          enableAnswerBook: item.task.enableAnswerBook !== false,
+          extraContext: item.task.extraContext?.trim() ?? '',
+          weatherCity: item.task.weatherCity ?? null,
+          weatherText: item.task.weatherText ?? null,
+          weatherScore: item.task.weatherScore ?? null,
+          itemPrice: item.task.itemPrice ?? null,
+          walletBalance: item.task.walletBalance ?? null,
+          walletScore: item.task.walletScore ?? null,
+          createdAt: item.createdAt ? new Date(item.createdAt) : undefined,
+        });
+        const savedTask = await manager.save(task);
+
+        const session = manager.create(TaskSession, {
+          taskId: savedTask.id,
+          agentSuggestIndex: item.session.agentSuggestIndex,
+          conclusion: item.session.conclusion,
+          persuadeMode: item.session.persuadeMode,
+          persuadeText: item.session.persuadeText,
+          minAction: item.session.minAction,
+          taroCard: item.session.taroCard ?? null,
+          tarotCards: item.session.tarotCards?.length
+            ? JSON.stringify(item.session.tarotCards)
+            : null,
+          tarotReading: item.session.tarotReading ?? null,
+          answerBook: item.session.answerBook ?? null,
+          answerBookReading: item.session.answerBookReading ?? null,
+          createdAt: item.createdAt ? new Date(item.createdAt) : undefined,
+        });
+        const saved = await manager.save(session);
+
+        if (item.record) {
+          await manager.save(
+            manager.create(ActionRecord, {
+              sessionId: saved.id,
+              userAcceptSuggest: item.record.userAcceptSuggest,
+              addToTodo: item.record.addToTodo === true,
+              isExecute: item.record.isExecute,
+              actualCostMin: item.record.actualCostMin,
+              executeResult: item.record.executeResult ?? '',
+              feedbackComment: item.record.feedbackComment ?? null,
+              agentReply: item.record.agentReply ?? null,
+            }),
+          );
+        }
+        return saved;
+      });
+      mappings.push({ oldId: item.oldId, newSessionId: savedSession.id });
+    }
+    return { mappings };
+  }
+
+  /**
+   * 神秘加成（塔罗/答案之书）+ LLM 建议计算：createSession 与 createGuestSession 共用。
+   * 只读外部服务，不写库。
+   */
+  private async computeAdvice(
+    dto: CreateSessionDto,
+    context: {
+      historySummary: string;
+      memoryText: string;
+      preferenceText: string;
+      lastSession?: { taskContent: string; category: string; conclusion: string };
+    },
+  ) {
     // 3. 神秘加成：塔罗牌先抽好（第三方失败时本地随机兜底），牌面注入主 prompt
     //    让主 LLM 出结论时顺带写解读，保证解读与结论方向一致，不会出现"建议去做但牌劝退"的矛盾
     let tarotCards: string[] | undefined;
@@ -112,17 +288,11 @@ export class AgentService {
     }
 
     // 4. 调 DeepSeek LLM 生成建议（带入历史行为 + 长期记忆 + 牌面 + 答案之书原文 + 上次结论；失败时 fallback 到规则计算）
-    const advice = await this.generateAdvice(dto, historySummary, memoryText, {
+    const advice = await this.generateAdvice(dto, context.historySummary, context.memoryText, {
       tarotCard: tarotCards?.[0],
       answerBookText: answerBook ?? undefined,
-      lastSession: lastSession
-        ? {
-            taskContent: lastSession.task.taskContent,
-            category: lastSession.task.category,
-            conclusion: lastSession.conclusion,
-          }
-        : undefined,
-      preferenceText,
+      lastSession: context.lastSession,
+      preferenceText: context.preferenceText,
     });
     const { agentSuggestIndex, conclusion, persuadeMode, persuadeText, minAction } = advice;
     // 解读只在勾选塔罗时有效，且必须是 LLM 真实返回的（规则兜底无解读）
@@ -131,24 +301,17 @@ export class AgentService {
     const answerBookReading =
       answerBook && advice.answerBookReading ? advice.answerBookReading.trim().slice(0, 100) : null;
 
-    // 5. 保存会话（historySummary 在读取时动态生成，不存固定值）
-    const session = this.sessionRepo.create({
-      taskId: savedTask.id,
+    return {
       agentSuggestIndex,
       conclusion,
       persuadeMode,
       persuadeText,
       minAction,
-      taroCard: tarotCards ? tarotCards[0] : null,
-      tarotCards: tarotCards ? JSON.stringify(tarotCards) : null,
+      tarotCards,
       tarotReading,
       answerBook,
       answerBookReading,
-    });
-    const savedSession = await this.sessionRepo.save(session);
-
-    // 复用开头算好的历史摘要只喂 prompt，不再随响应返回（页面展示已移除，避免与关键词重叠）
-    return this.toSessionRes(savedSession, tarotCards, answerBook);
+    };
   }
 
   /** 会话详情（校验归属） */
@@ -310,12 +473,17 @@ export class AgentService {
     const taskId = session.task.id;
     const category = session.task.category;
 
-    // 由该会话加入计划表的待办一并删除
-    await this.todoService.deleteBySession(sessionId);
-    // 显式按顺序删除，不依赖外键级联时序
-    await this.recordRepo.delete({ sessionId });
-    await this.sessionRepo.delete(sessionId);
-    await this.taskRepo.delete(taskId);
+    // 使用事务包裹所有删除操作，确保原子性（参考图片方案）
+    await this.dataSource.transaction(async (manager) => {
+      // 1. 由该会话加入计划表的待办一并删除
+      await manager.delete(Todo, { sessionId });
+      // 2. 删反馈记录
+      await manager.delete(ActionRecord, { sessionId });
+      // 3. 删会话
+      await manager.delete(TaskSession, sessionId);
+      // 4. 删任务
+      await manager.delete(Task, taskId);
+    });
 
     // 3.4：派生记忆随样本变化重算（样本归零则回收该类别受管记忆）
     await this.behaviorMemoryService.syncFromFeedback(userId, category);
@@ -339,10 +507,14 @@ export class AgentService {
     const sessionIds = owned.map((s) => s.id);
     const taskIds = owned.map((s) => s.task.id);
     const categories = [...new Set(owned.map((s) => s.task.category))];
-    await this.todoService.deleteBySessions(sessionIds);
-    await this.recordRepo.delete({ sessionId: In(sessionIds) });
-    await this.sessionRepo.delete(sessionIds);
-    await this.taskRepo.delete(taskIds);
+
+    // 使用事务包裹批量删除操作
+    await this.dataSource.transaction(async (manager) => {
+      await manager.delete(Todo, { sessionId: In(sessionIds) });
+      await manager.delete(ActionRecord, { sessionId: In(sessionIds) });
+      await manager.delete(TaskSession, sessionIds);
+      await manager.delete(Task, taskIds);
+    });
 
     // 3.4：受影响类别的派生记忆逐一重算
     for (const category of categories) {

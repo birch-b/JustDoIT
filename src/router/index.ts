@@ -13,13 +13,13 @@ const routes: RouteRecordRaw[] = [
     path: "/task-create",
     name: "task-create",
     component: () => import("@/views/TaskCreate.vue"),
-    meta: { title: "新的纠结 | New Decision", requiresAuth: true },
+    meta: { title: "新的纠结 | New Decision" },
   },
   {
     path: "/session/:id",
     name: "session",
     component: () => import("@/views/SessionResult.vue"),
-    meta: { title: "Agent 结果 | Agent Result", requiresAuth: true },
+    meta: { title: "Agent 结果 | Agent Result" },
     props: true,
   },
   {
@@ -86,7 +86,7 @@ const router = createRouter({
   },
 });
 
-// 登录守卫：除首页 / 登录 / 注册 / 忘记密码外，所有页面都需要登录
+// 登录守卫：首页 / 新决策 / 会话结果 / 登录 / 注册 / 忘记密码免登录（游客模式，数据只存浏览器）
 router.beforeEach((to) => {
   const userStore = useUserStore();
   if (!userStore.currentUser) userStore.init();

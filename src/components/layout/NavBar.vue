@@ -41,12 +41,16 @@ function closeIfNarrow() {
   if (isNarrow.value) expanded.value = false;
 }
 
-const links = [
-  { to: "/", cn: "首页", en: "Home" },
-  { to: "/task-create", cn: "新的纠结", en: "New" },
-  { to: "/stats", cn: "统计", en: "Stats" },
-  { to: "/keywords", cn: "自我探索", en: "Self" },
-];
+// 游客只放通首页/新的纠结；统计与自我探索仍受登录守卫保护，对游客是死链故隐藏
+const links = computed(() => {
+  const all = [
+    { to: "/", cn: "首页", en: "Home" },
+    { to: "/task-create", cn: "新的纠结", en: "New" },
+    { to: "/stats", cn: "统计", en: "Stats" },
+    { to: "/keywords", cn: "自我探索", en: "Self" },
+  ];
+  return userStore.isLoggedIn ? all : all.slice(0, 2);
+});
 
 const authLinks = computed(() => {
   const list = [{ to: "/profile", cn: "个人中心", en: "Profile" }];
@@ -140,18 +144,17 @@ function logout() {
                     退出
                   </button>
                 </template>
-                <RouterLink
-                  v-else
-                  to="/login"
-                  class="group flex flex-col items-center opacity-60 hover:opacity-100 whitespace-nowrap"
-                  :class="route.path === '/login' ? 'opacity-100' : ''"
-                >
-                  <span class="text-base md:text-lg font-light">登录</span>
-                  <span
-                    class="mt-1 h-px bg-sketch-accent transition-all duration-300"
-                    :class="route.path === '/login' ? 'w-6' : 'w-0 group-hover:w-4'"
-                  />
-                </RouterLink>
+                <template v-else>
+                  <span class="text-xs font-light text-sketch-lineSub whitespace-nowrap">
+                    游客体验中
+                  </span>
+                  <RouterLink
+                    to="/login"
+                    class="rounded-sm border border-sketch-accent px-3 py-1 text-sm font-light text-sketch-accent transition-colors hover:bg-sketch-accent hover:text-white whitespace-nowrap"
+                  >
+                    登录/注册
+                  </RouterLink>
+                </template>
               </div>
             </div>
           </div>
@@ -238,15 +241,20 @@ function logout() {
                 </button>
               </div>
             </template>
-            <RouterLink
-              v-else
-              to="/login"
-              class="flex items-center justify-between px-3 py-2.5 text-left rounded-sm transition-colors"
-              :class="route.path === '/login' ? 'bg-sketch-accent/10 text-sketch-line' : 'text-sketch-lineSub hover:bg-sketch-hover'"
-              @click="closeIfNarrow"
-            >
-              <span class="text-base font-light">登录</span>
-            </RouterLink>
+            <template v-else>
+              <div class="flex items-center justify-between px-3 py-2">
+                <span class="text-sm font-light text-sketch-lineSub">
+                  游客体验中
+                </span>
+                <RouterLink
+                  to="/login"
+                  class="rounded-sm border border-sketch-accent px-3 py-1 text-sm font-light text-sketch-accent transition-colors hover:bg-sketch-accent hover:text-white"
+                  @click="closeIfNarrow"
+                >
+                  登录/注册
+                </RouterLink>
+              </div>
+            </template>
           </div>
         </div>
       </transition>

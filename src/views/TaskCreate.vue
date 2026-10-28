@@ -465,33 +465,33 @@ function reset() {
               <div v-if="isBinary" class="ml-8 mt-3 space-y-4 border border-sketch-line/30 px-5 py-4">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label class="text-xs text-sketch-lineSub">选项 A</label>
+                    <label class="text-sm text-sketch-lineSub">选项 A</label>
                     <input
                       v-model="optionA"
                       maxlength="50"
                       placeholder="例如：买"
-                      class="sketch-input mt-1 w-full"
+                      class="sketch-input mt-1 w-full text-base"
                       @input="binaryTouched = true"
                     />
                   </div>
                   <div>
-                    <label class="text-xs text-sketch-lineSub">选项 B</label>
+                    <label class="text-sm text-sketch-lineSub">选项 B</label>
                     <input
                       v-model="optionB"
                       maxlength="50"
                       placeholder="例如：不买"
-                      class="sketch-input mt-1 w-full"
+                      class="sketch-input mt-1 w-full text-base"
                       @input="binaryTouched = true"
                     />
                   </div>
                 </div>
-                <p class="text-xs font-light text-sketch-lineSub">
+                <p class="text-sm font-light text-sketch-lineSub">
                   已按纠结内容里的「还是 / 或者」自动切分，不对就直接改
                 </p>
                 <div>
                   <div class="flex items-baseline justify-between">
-                    <span class="text-xs text-sketch-lineSub">当前倾向</span>
-                    <span class="text-sm font-light">{{ leanLabel }}</span>
+                    <span class="text-sm text-sketch-lineSub">当前倾向</span>
+                    <span class="text-base font-light">{{ leanLabel }}</span>
                   </div>
                   <input
                     type="range"
@@ -501,7 +501,7 @@ function reset() {
                     class="sketch-range mt-2"
                     v-model.number="binaryLean"
                   />
-                  <div class="flex justify-between text-[10px] text-sketch-lineSub tracking-widest">
+                  <div class="flex justify-between text-xs text-sketch-lineSub tracking-widest">
                     <span>选 A</span><span>拿不定</span><span>选 B</span>
                   </div>
                 </div>
@@ -517,7 +517,7 @@ function reset() {
               ]" :key="s.key">
                 <div class="flex items-baseline justify-between">
                   <DualTextBlock :cn="s.cn" :en="s.en" size="sm" weight="normal" />
-                  <span class="text-lg font-light font-en">
+                  <span class="text-xl font-light font-en">
                     {{ (form as any)[s.key] }}
                   </span>
                 </div>
@@ -529,7 +529,7 @@ function reset() {
                   class="sketch-range mt-2"
                   v-model.number="(form as any)[s.key]"
                 />
-                <div class="flex justify-between text-[10px] text-sketch-lineSub font-en tracking-widest">
+                <div class="flex justify-between text-xs text-sketch-lineSub font-en tracking-widest">
                   <span>LOW</span><span>HIGH</span>
                 </div>
               </div>
@@ -539,7 +539,7 @@ function reset() {
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <DualTextBlock cn="预计耗时（可选）" en="COST (MIN, OPTIONAL)" size="sm" weight="normal" />
-                <input type="number" min="1" v-model.number="form.expectCostMin" class="sketch-input mt-2 h-9 w-full" placeholder="—" />
+                <input type="number" min="1" v-model.number="form.expectCostMin" class="sketch-input mt-2 h-10 w-full text-base" placeholder="—" />
               </div>
               <div>
                 <DualTextBlock cn="截止时间（可选）" en="DEADLINE (OPTIONAL)" size="sm" weight="normal" />
@@ -563,7 +563,7 @@ function reset() {
                     step="0.01"
                     inputmode="decimal"
                     v-model.number="form.itemPrice"
-                    class="sketch-input mt-2 w-full"
+                    class="sketch-input mt-2 w-full text-base"
                   />
                 </div>
                 <div>
@@ -574,18 +574,18 @@ function reset() {
                     step="0.01"
                     inputmode="decimal"
                     v-model.number="form.walletBalance"
-                    class="sketch-input mt-2 w-full"
+                    class="sketch-input mt-2 w-full text-base"
                   />
                 </div>
               </div>
-              <p v-if="form.itemPrice && form.walletBalance && form.walletBalance > 0" class="text-sm font-light text-sketch-lineSub">
+              <p v-if="form.itemPrice && form.walletBalance && form.walletBalance > 0" class="text-base font-light text-sketch-lineSub">
                 这笔消费约占钱包余额的
                 <span class="text-sketch-accent">{{ ((form.itemPrice / form.walletBalance) * 100).toFixed(1) }}%</span>
               </p>
               <div>
                 <div class="flex items-baseline justify-between">
                   <DualTextBlock cn="钱包宽裕度" en="WALLET ROOM" size="sm" weight="normal" />
-                  <span class="text-lg font-light font-en">{{ form.walletScore }}</span>
+                  <span class="text-xl font-light font-en">{{ form.walletScore }}</span>
                 </div>
                 <input
                   type="range"
@@ -595,7 +595,7 @@ function reset() {
                   class="sketch-range mt-2"
                   v-model.number="form.walletScore"
                 />
-                <div class="flex justify-between text-[10px] text-sketch-lineSub font-en tracking-widest">
+                <div class="flex justify-between text-xs text-sketch-lineSub font-en tracking-widest">
                   <span>吃紧</span><span>宽裕</span>
                 </div>
               </div>
@@ -643,7 +643,7 @@ function reset() {
                   <button
                     v-if="canLocate"
                     type="button"
-                    class="pb-1 text-xs font-light text-sketch-lineSub underline decoration-sketch-line/40 underline-offset-4 transition-colors hover:text-sketch-line disabled:opacity-50"
+                    class="pb-1 text-sm font-light text-sketch-lineSub underline decoration-sketch-line/40 underline-offset-4 transition-colors hover:text-sketch-line disabled:opacity-50"
                     :disabled="locating"
                     @click="locateWeather"
                   >
@@ -651,31 +651,31 @@ function reset() {
                   </button>
                 </div>
 
-                <p v-if="locating" class="text-xs font-light text-sketch-lineSub">正在看你在哪片天空下…</p>
-                <p v-else-if="weatherLoading" class="text-xs font-light text-sketch-lineSub">正在看天…</p>
-                <p v-else-if="weatherError" class="text-xs font-light text-sketch-line leading-relaxed">
+                <p v-if="locating" class="text-sm font-light text-sketch-lineSub">正在看你在哪片天空下…</p>
+                <p v-else-if="weatherLoading" class="text-sm font-light text-sketch-lineSub">正在看天…</p>
+                <p v-else-if="weatherError" class="text-sm font-light text-sketch-line leading-relaxed">
                   {{ weatherError }}
                 </p>
 
                 <!-- 天气卡 + 打分 -->
                 <template v-if="weatherInfo">
                   <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                    <span class="text-lg font-light">{{ weatherInfo.weatherDesc }}</span>
-                    <span class="text-sm font-light font-en">{{ weatherInfo.tempC }}°C</span>
-                    <span class="text-xs font-light text-sketch-lineSub font-en">
+                    <span class="text-xl font-light">{{ weatherInfo.weatherDesc }}</span>
+                    <span class="text-base font-light font-en">{{ weatherInfo.tempC }}°C</span>
+                    <span class="text-sm font-light text-sketch-lineSub font-en">
                       体感 {{ weatherInfo.feelsLikeC }}°C
                     </span>
-                    <span v-if="weatherInfo.humidity" class="text-xs font-light text-sketch-lineSub">
+                    <span v-if="weatherInfo.humidity" class="text-sm font-light text-sketch-lineSub">
                       湿度 {{ weatherInfo.humidity }}%
                     </span>
-                    <span v-if="weatherInfo.windText" class="text-xs font-light text-sketch-lineSub">
+                    <span v-if="weatherInfo.windText" class="text-sm font-light text-sketch-lineSub">
                       {{ weatherInfo.windText }}
                     </span>
                   </div>
                   <div>
                     <div class="flex items-baseline justify-between">
                       <DualTextBlock cn="给今天天气打个分" en="WEATHER MOOD" size="sm" weight="normal" />
-                      <span class="text-lg font-light font-en">{{ form.weatherScore }}</span>
+                      <span class="text-xl font-light font-en">{{ form.weatherScore }}</span>
                     </div>
                     <input
                       type="range"
@@ -685,7 +685,7 @@ function reset() {
                       class="sketch-range mt-2"
                       v-model.number="form.weatherScore"
                     />
-                    <div class="flex justify-between text-[10px] text-sketch-lineSub font-en tracking-widest">
+                    <div class="flex justify-between text-xs text-sketch-lineSub font-en tracking-widest">
                       <span>讨厌</span><span>一般</span><span>舒服</span>
                     </div>
                   </div>
@@ -701,7 +701,7 @@ function reset() {
               </div>
               <textarea
                 v-model="form.extraContext"
-                class="sketch-input mt-2 w-full resize-none"
+                class="sketch-input mt-2 w-full resize-none text-base"
                 rows="2"
                 maxlength="500"
              
@@ -709,7 +709,7 @@ function reset() {
             </div>
 
             <!-- 错误提示 -->
-            <p v-if="errorMsg" class="text-xs text-sketch-line border border-sketch-line/40 px-3 py-2">
+            <p v-if="errorMsg" class="text-sm text-sketch-line border border-sketch-line/40 px-3 py-2">
               {{ errorMsg }}
             </p>
 

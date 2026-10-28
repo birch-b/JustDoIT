@@ -1,4 +1,4 @@
-// Pinia 仓库：纯数据容器，所有业务规则由后端决定
+// Pinia 仓库：登录用户数据走后端；游客数据存浏览器 localStorage（guestStorage）
 import { defineStore } from "pinia";
 import type {
   TaskCreateReq,
@@ -13,6 +13,7 @@ import type {
 import { agentApi } from "@/api/agentApi";
 import { isNetworkError, sleep } from "@/api/http";
 import { useUserStore } from "@/store/userStore";
+import { guestStorage } from "@/utils/guestStorage";
 
 interface PersistedSession {
   session: AgentSessionRes;
@@ -136,7 +137,9 @@ export const useAgentStore = defineStore("agent", {
     async loadSessions(): Promise<void> {
       const userStore = useUserStore();
       if (!userStore.isLoggedIn) {
-        this.resetSessions();
+        // 游客：从浏览器本地恢复（无网络请求，loadError 恒为 false）
+        this.sessions = guestStorage.loadSessions();
+        this.loadError = false;
         return;
       }
       this.loading = true;
@@ -166,8 +169,27 @@ export const useAgentStore = defineStore("agent", {
       this.loading = false;
     },
 
-    /** 创建会话：纯调后端，失败抛出由调用方处理 */
+    /**
+     * 创建会话：登录用户调需鉴权接口并落库；游客调匿名接口（后端只算不存），
+     * 结果换本地负数 ID 后存浏览器。失败抛出由调用方处理。
+     */
     async createSession(task: TaskCreateReq): Promise<AgentSessionRes> {
+      const userStore = useUserStore();
+      if (!userStore.isLoggedIn) {
+        const res = await agentApi.createGuestSession(task);
+        const session: AgentSessionRes = {
+          ...res,
+          sessionId: guestStorage.nextSessionId(),
+        };
+        this.sessions.unshift({
+          session,
+          task: { ...task },
+          record: null,
+          createdAt: new Date().toISOString(),
+        });
+        guestStorage.saveSessions(this.sessions);
+        return session;
+      }
       const session = await agentApi.createSession(task);
       this.sessions.unshift({
         session,
@@ -178,7 +200,7 @@ export const useAgentStore = defineStore("agent", {
       return session;
     },
 
-    /** 历史详情：优先缓存，否则拉取后端 */
+    /** 历史详情：优先缓存；登录用户回退拉后端，游客只查本地 */
     async fetchHistory(sessionId: number): Promise<HistoryDetail | undefined> {
       const cached = this.sessions.find(
         (s) => s.session.sessionId === sessionId
@@ -190,6 +212,18 @@ export const useAgentStore = defineStore("agent", {
           record: cached.record,
           createdAt: cached.createdAt,
         };
+      }
+      const userStore = useUserStore();
+      if (!userStore.isLoggedIn) {
+        // 游客无后端可拉：尝试从本地存储恢复（应对刷新后内存丢失）
+        const local = guestStorage.loadSessions().find(
+          (s) => s.session.sessionId === sessionId
+        );
+        if (!local) return undefined;
+        if (!this.sessions.some((s) => s.session.sessionId === sessionId)) {
+          this.sessions.unshift(local);
+        }
+        return local;
       }
       try {
         const detail = await agentApi.getHistory(sessionId);
@@ -205,8 +239,41 @@ export const useAgentStore = defineStore("agent", {
       }
     },
 
-    /** 提交行为反馈 */
+    /** 提交行为反馈：登录走后端；游客本地更新 + 公开接口拿 LLM 二次回复（withReply 时） */
     async submitRecord(req: ActionRecordReq): Promise<ActionRecord | undefined> {
+      const userStore = useUserStore();
+      if (!userStore.isLoggedIn) {
+        const target = this.sessions.find(
+          (s) => s.session.sessionId === req.sessionId
+        );
+        if (!target) return undefined;
+        // 与登录用户同源：做出决定时调公开接口生成二次回复；失败静默降级为空
+        let agentReply = target.record?.agentReply;
+        if (req.withReply) {
+          const res = await agentApi.guestFeedbackReply({
+            taskContent: target.task.taskContent,
+            category: target.task.category,
+            conclusion: target.session.conclusion,
+            persuadeMode: target.session.persuadeMode,
+            persuadeText: target.session.persuadeText,
+            minAction: target.session.minAction,
+            accepted: req.userAcceptSuggest,
+            addToTodo: req.addToTodo === true,
+            comment: req.comment?.trim() ?? "",
+          });
+          if (res?.reply) agentReply = res.reply;
+        }
+        const record: ActionRecord = {
+          ...req,
+          recordId: target.record?.recordId ?? -Date.now(),
+          feedbackComment: req.comment,
+          agentReply,
+          createdAt: target.record?.createdAt ?? new Date().toISOString(),
+        };
+        target.record = record;
+        guestStorage.saveSessions(this.sessions);
+        return record;
+      }
       try {
         const record = await agentApi.submitActionRecord(req);
         const target = this.sessions.find(
@@ -224,8 +291,20 @@ export const useAgentStore = defineStore("agent", {
       return this.sessions.find((s) => s.session.sessionId === sessionId);
     },
 
-    /** 删除会话记录：调后端成功后移除本地缓存 */
+    /** 删除会话记录：登录调后端（级联删待办）；游客本地删除并同步清掉关联待办 */
     async deleteSession(sessionId: number): Promise<boolean> {
+      const userStore = useUserStore();
+      if (!userStore.isLoggedIn) {
+        this.sessions = this.sessions.filter(
+          (s) => s.session.sessionId !== sessionId
+        );
+        guestStorage.saveSessions(this.sessions);
+        // 关联待办一并删除（对齐后端级联行为）
+        guestStorage.saveTodos(
+          guestStorage.loadTodos().filter((t) => t.sessionId !== sessionId)
+        );
+        return true;
+      }
       await agentApi.deleteSession(sessionId);
       this.sessions = this.sessions.filter(
         (s) => s.session.sessionId !== sessionId
@@ -233,9 +312,23 @@ export const useAgentStore = defineStore("agent", {
       return true;
     },
 
-    /** 批量删除会话：成功后一次性移除本地缓存，返回删除条数 */
+    /** 批量删除会话：登录调后端；游客本地批量删除并同步清掉关联待办 */
     async batchDeleteSessions(ids: number[]): Promise<number> {
       if (!ids.length) return 0;
+      const userStore = useUserStore();
+      if (!userStore.isLoggedIn) {
+        const idSet = new Set(ids);
+        this.sessions = this.sessions.filter(
+          (s) => !idSet.has(s.session.sessionId)
+        );
+        guestStorage.saveSessions(this.sessions);
+        guestStorage.saveTodos(
+          guestStorage.loadTodos().filter(
+            (t) => !t.sessionId || !idSet.has(t.sessionId)
+          )
+        );
+        return ids.length;
+      }
       const res = await agentApi.batchDeleteSessions(ids);
       const idSet = new Set(ids);
       this.sessions = this.sessions.filter(
