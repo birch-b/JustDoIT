@@ -32,6 +32,12 @@ export class AdminController {
     return this.adminService.userList();
   }
 
+  /** 游客访问列表 GET /api/admin/guests（按 visitorId 聚合的匿名访客） */
+  @Get('guests')
+  guests() {
+    return this.adminService.guestList();
+  }
+
   /** 反馈列表 GET /api/admin/feedbacks */
   @Get('feedbacks')
   feedbacks() {

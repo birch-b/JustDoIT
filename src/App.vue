@@ -8,6 +8,7 @@ import PreferenceQuestionnaire, {
   openQuestionnaire,
 } from "@/components/onboarding/PreferenceQuestionnaire.vue";
 import FloatingHelpButton from "@/components/onboarding/FloatingHelpButton.vue";
+import GuestSyncPrompt from "@/components/layout/GuestSyncPrompt.vue";
 import { trackVisit } from "@/api/announcementApi";
 
 const route = useRoute();
@@ -47,5 +48,7 @@ onMounted(() => {
     <OnboardingGuide />
     <!-- 偏好问卷弹层：全局挂载，注册后引导或关键词页编辑都能触发 -->
     <PreferenceQuestionnaire />
+    <!-- 游客数据同步询问：登录/注册后若本地仍有游客数据，由用户决定是否并入账号 -->
+    <GuestSyncPrompt />
   </div>
 </template>

@@ -6,6 +6,7 @@ import {
   adminApi,
   type AdminOverview,
   type AdminFeedbackItem,
+  type AdminGuestItem,
   type AdminUserItem,
   ADMIN_USER_STATUS_LABEL,
   type UpsertAnnouncementPayload,
@@ -25,6 +26,7 @@ import SketchCollapse from "@/components/sketch/SketchCollapse.vue";
 
 const overview = ref<AdminOverview | null>(null);
 const users = ref<AdminUserItem[]>([]);
+const guests = ref<AdminGuestItem[]>([]);
 const feedbacks = ref<AdminFeedbackItem[]>([]);
 const announcements = ref<Announcement[]>([]);
 const loading = ref(true);
@@ -62,14 +64,16 @@ async function loadAll() {
   loading.value = true;
   errorMsg.value = "";
   try {
-    const [o, u, f, a] = await Promise.all([
+    const [o, u, g, f, a] = await Promise.all([
       adminApi.overview(),
       adminApi.users(),
+      adminApi.guests(),
       adminApi.feedbacks(),
       adminApi.announcements(),
     ]);
     overview.value = o;
     users.value = u;
+    guests.value = g;
     feedbacks.value = f;
     announcements.value = a;
     // 最新月份的反馈默认展开，其余折叠
@@ -193,11 +197,15 @@ function tagClass(type: AnnouncementItem["type"]) {
       </p>
 
       <template v-else>
-        <!-- 统计卡片 -->
-        <section class="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <!-- 统计卡片：注册用户与游客分列，一眼看出两类访问 -->
+        <section class="grid grid-cols-2 gap-4 md:grid-cols-3">
           <SketchBorder padding="1.25rem 1rem">
             <p class="text-center text-2xl md:text-3xl font-light">{{ overview?.totalUsers ?? 0 }}</p>
-            <p class="mt-1 text-center text-xs font-light text-sketch-lineSub">用户总数</p>
+            <p class="mt-1 text-center text-xs font-light text-sketch-lineSub">注册用户</p>
+          </SketchBorder>
+          <SketchBorder padding="1.25rem 1rem">
+            <p class="text-center text-2xl md:text-3xl font-light">{{ overview?.totalGuests ?? 0 }}</p>
+            <p class="mt-1 text-center text-xs font-light text-sketch-lineSub">游客数</p>
           </SketchBorder>
           <SketchBorder padding="1.25rem 1rem">
             <p class="text-center text-2xl md:text-3xl font-light">{{ overview?.totalVisits ?? 0 }}</p>
@@ -210,6 +218,10 @@ function tagClass(type: AnnouncementItem["type"]) {
           <SketchBorder padding="1.25rem 1rem">
             <p class="text-center text-2xl md:text-3xl font-light">{{ overview?.todayActiveUsers ?? 0 }}</p>
             <p class="mt-1 text-center text-xs font-light text-sketch-lineSub">今日活跃用户</p>
+          </SketchBorder>
+          <SketchBorder padding="1.25rem 1rem">
+            <p class="text-center text-2xl md:text-3xl font-light">{{ overview?.todayGuests ?? 0 }}</p>
+            <p class="mt-1 text-center text-xs font-light text-sketch-lineSub">今日游客</p>
           </SketchBorder>
         </section>
 
@@ -240,6 +252,34 @@ function tagClass(type: AnnouncementItem["type"]) {
                 <p class="mt-1 text-xs font-light text-sketch-lineSub">
                   {{ u.email }} · 注册于 {{ fmtTime(u.registeredAt) }} ·
                   {{ u.lastActiveAt ? `最后活跃 ${fmtTime(u.lastActiveAt)}` : "没有访问记录" }}
+                </p>
+              </li>
+            </ul>
+          </SketchBorder>
+        </section>
+
+        <!-- 游客访问 -->
+        <section class="mt-8">
+          <DualTextBlock cn="游客访问" en="GUESTS" size="sm" weight="normal" />
+          <SketchBorder padding="1.25rem 1.5rem" class="mt-3">
+            <p class="mb-2 text-xs font-light text-sketch-lineSub">
+              未登录的临时访客，按浏览器标识去重。
+            </p>
+            <p v-if="!guests.length" class="text-xs font-light text-sketch-lineSub">
+              还没有游客访问记录。
+            </p>
+            <ul v-else class="divide-y divide-sketch-line/15">
+              <li v-for="g in guests" :key="g.visitorId" class="py-2.5">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-sm font-light text-sketch-line">{{ g.name }}</span>
+                  <span
+                    class="inline-block shrink-0 border border-sketch-line/40 px-1.5 py-0.5 text-[10px] leading-none text-sketch-lineSub"
+                  >
+                    访问 {{ g.visitCount }} 次
+                  </span>
+                </div>
+                <p class="mt-1 text-xs font-light text-sketch-lineSub">
+                  首次 {{ fmtTime(g.firstVisitAt) }} · 最后 {{ fmtTime(g.lastVisitAt) }}
                 </p>
               </li>
             </ul>
@@ -295,7 +335,15 @@ function tagClass(type: AnnouncementItem["type"]) {
                   <ul class="mt-1 divide-y divide-sketch-line/15">
                     <li v-for="f in g.list" :key="f.id" class="py-2.5">
                       <div class="flex items-baseline justify-between gap-2">
-                        <span class="text-xs text-sketch-line">{{ f.username }}</span>
+                        <span class="flex items-center gap-1.5">
+                          <span class="text-xs text-sketch-line">{{ f.username }}</span>
+                          <span
+                            v-if="f.isGuest"
+                            class="inline-block shrink-0 border border-sketch-line/40 px-1 py-px text-[10px] leading-none text-sketch-lineSub"
+                          >
+                            游客
+                          </span>
+                        </span>
                         <span class="shrink-0 text-[10px] text-sketch-lineSub">{{ fmtTime(f.createdAt) }}</span>
                       </div>
                       <p class="mt-1 whitespace-pre-wrap text-sm font-light leading-relaxed text-sketch-lineSub">

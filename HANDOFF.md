@@ -1,21 +1,18 @@
 # HANDOFF · 拍板大王 JUST DO IT
 
-> 更新时间：2026-10-25　|　分支：`dev`　|　前后端同一仓库
+> 更新时间：2026-10-28　|　分支：`dev`　|　前后端同一仓库
 > 一句话：帮纠结的人决定「做不做」。Vue3 前端 + NestJS 后端 + DeepSeek LLM。
 
 ---
 
 ## 0. 工程速览
 
-| 项 | 内容 |
-| --- | --- |
-| 前端 | `src/` · Vue3 + Vite + Pinia + Tailwind + TS · **pnpm 10.19.0** |
-| 后端 | `action-agent-nest/` · NestJS + TypeORM + MySQL · **npm** |
-| 端口 | 前端 Vite（`/api` 代理到 `http://localhost:3000`）· 后端 `3000` |
-| 依赖服务 | Redis（Docker `redis:7-alpine`，`127.0.0.1:6379`）、MySQL80 |
-| 锁文件 | 根目录只留 `pnpm-lock.yaml`；后端保留 `action-agent-nest/package-lock.json` |
+- **前端**：`src/` · Vue3 + Vite + Pinia + Tailwind + TS · **pnpm 10.19.0** · Vite 端口锁 **5174**，`/api` 代理到 `http://localhost:3000`。
+- **后端**：`action-agent-nest/` · NestJS + TypeORM + MySQL · **npm** · 端口 `3000`。
+- **依赖服务**：Redis（Docker `redis:7-alpine`，容器名 `redis`，`127.0.0.1:6379`，`restart unless-stopped`）、MySQL80。
+- **锁文件**：根目录只留 `pnpm-lock.yaml`（`/package-lock.json`、`/yarn.lock` 被根 `.gitignore` 锚定忽略）；后端保留 `action-agent-nest/package-lock.json`。
 
-**启动顺序**：`docker ps` 确认 Redis → 后端 `npm run start:dev` → 前端 `pnpm dev`
+**启动顺序**：`docker ps` 确认 Redis 在跑 → 后端 `npm run start:dev` → 前端 `pnpm dev`
 
 **三条硬规则**
 
@@ -23,48 +20,86 @@
 2. watch 增量编译失败会让 `dist` 残缺（报 `Cannot find module './app.module'`）→ 杀进程 + `Remove-Item -Recurse -Force dist` 再重启。
 3. 3000 被旧进程占用会 `EADDRINUSE` → `Get-NetTCPConnection -LocalPort 3000` 找 PID 后 Stop-Process。
 
+**环境变量（`.env`）**（对应 `src/config/configuration.ts`）
+
+- **数据库**：`MYSQL_HOST` / `MYSQL_PORT` / `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` / `DB_SYNCHRONIZE`（默认 true，**生产必须 false**）
+- **JWT**：`JWT_SECRET` / `JWT_EXPIRES_IN`（默认 7d）
+- **LLM**：`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`（当前 DeepSeek）
+- **第三方 API**：`TAROT_API_KEY` / `WEATHER_API_KEY` / `MXNZP_APP_ID` / `MXNZP_APP_SECRET` / `BAIDU_MAP_AK`
+- **邮箱**：`QQ_MAIL_USER` / `QQ_MAIL_AUTH_CODE`（SMTP，发验证码邮件）
+- **Redis**：`REDIS_URL`（默认 `redis://localhost:6379`）
+- **安全**：`DATA_ENCRYPTION_KEY`（字段级 AES-256-GCM）/ `CORS_ORIGINS`（白名单）
+- **站点**：`APP_URL`（邮件链接跳转地址，默认 `https://8.166.131.200`）
+
 ---
 
 ## 1. 功能状态
 
-| 模块 | 状态 | 备注 |
-| --- | --- | --- |
-| 注册/登录（JWT，用户名或邮箱） | ✅ | 登录态存 `jdi_current_user`，24h 不活跃自动登出 |
-| 邮箱验证码（注册/找回/注销） | ✅ | 已迁 Redis，TTL 5min |
-| 用户资料 / 偏好 | ✅ | `PATCH /user/profile`、`PATCH /user/preference` |
-| Agent 会话创建/列表/详情/历史/反馈/删除 | ✅ | 真实接口 |
-| DeepSeek LLM 建议 | ✅ | 失败自动降级规则引擎 |
-| 答案之书 / 塔罗牌 / 天气 | ✅ | 第三方失败有本地兜底 |
-| 计划表待办 CRUD + 归档 | ✅ | 含「接受→执行」回写 |
-| 完成打卡 + Agent 回应 | ✅ | `POST /todos/:id/reflect`，两阶段弹窗 |
-| 定时「做了吗」询问（站内卡 + 邮件） | ✅ | cron 每分钟扫 + 前端 `checkinDueAt` 判断 |
-| 记忆关键词 + 自我探索手册 | ✅ | 规则引擎 3.4 + LLM 提炼 3.5 + 手册 |
-| 地点搜索 | ✅ | 百度 suggestion + 定位三级兜底 |
-| 后台管理 `/admin` | ✅ | 仅 `role=admin` |
-| 公告 / 意见反馈 / 访问统计 | ✅ | 公告后端化，铃铛拉接口 |
-| 新手引导 / 偏好问卷 | ✅ | 注册后问卷 → 引导；随时可重开 |
-| 部署安全加固 | ✅ | 字段级 AES-256-GCM + CORS 白名单 |
+**核心链路**
+
+- 注册 / 登录（JWT，用户名或邮箱均可）：注册直接签发 token 返回，登录态存 `jdi_current_user`，24h 不活跃自动登出。
+- 邮箱验证码（注册 / 找回密码 / 注销）：已迁 Redis，TTL 5min，启动探活失败即拒绝启动。
+- 用户资料 / 偏好：`PATCH /user/profile`、`PATCH /user/preference`。
+- 忘记密码：`/forgot-password` 页，邮箱验证码 + 重置。
+- Agent 会话创建 / 列表 / 详情 / 历史 / 反馈 / 删除：真实接口。
+- 游客模式：完整闭环——浏览器本地存 → 匿名 LLM 试用（每 IP 每日 30 次，内存滑动窗口限流）→ 登录后 import 落库 + 新旧 ID 映射。
+
+**LLM 与神秘加成**
+
+- DeepSeek LLM 建议，失败自动降级规则引擎。
+- 答案之书 / 塔罗牌 / 天气：第三方接口失败有本地兜底；塔罗与答案之书同次调用输出同向解读。
+
+**计划表与打卡**
+
+- 待办 CRUD + 归档 + 「接受→执行」回写。
+- 完成打卡 + Agent 回应：`POST /todos/:id/reflect`，两阶段弹窗。
+- 定时「做了吗」询问：站内卡 + 邮件，cron 每分钟扫 + 前端 `checkinDueAt` 判断。
+
+**记忆与探索**
+
+- 记忆关键词 + 自我探索手册：规则引擎 3.4 + LLM 提炼 3.5 + 手册（Redis 快照 180 天，7 天自动重写）。
+- 地点搜索：百度 suggestion + 定位三级兜底。
+
+**后台与运营**
+
+- 后台管理 `/admin`：仅 `role=admin`。
+- 公告 / 意见反馈 / 访问统计：公告后端化，铃铛拉 API。
+
+**其他**
+
+- 新手引导 / 偏好问卷：注册后问卷 → 引导；随时可重开。
+- 部署安全加固：字段级 AES-256-GCM + CORS 白名单 + 本地服务绑 127.0.0.1。
 
 ---
 
 ## 2. 功能模块
 
-### 2.1 Agent 接口（`src/agent/`，除公开接口外均需 JWT）
+### 2.1 Agent 接口（`src/agent/`）
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| POST | `/agent/session/create` | 建会话：存任务 → LLM/规则算建议 → 神秘加成 → 存会话 |
-| GET | `/agent/sessions` | 历史列表（SQL 层 userId 过滤） |
-| GET | `/agent/stats` | 统计聚合（会话数/执行数/接受率/模式分布/意愿vs完成） |
-| GET | `/agent/session/:id` | 会话详情（校验归属） |
-| GET | `/agent/history/:id` | 历史详情（会话+任务+反馈） |
-| POST | `/agent/action/record` | 行为反馈 upsert；`withReply:true` 时二次调 LLM 生成回应 |
-| DELETE | `/agent/session/:id` | 级联删：待办→反馈→会话→任务 |
-| GET | `/agent/answer-book` | 公开，答案之书（uapis.cn） |
-| POST | `/agent/tarot` | 公开，塔罗抽 1 张（妖狐 API + 本地兜底） |
-| GET | `/agent/weather?city=武汉` | 公开，今日天气（whyta.cn），失败 `data:null` |
-| GET | `/agent/cities` | 公开，省市两级联动（mxnzp，31 省 341 市，缓存 24h） |
-| GET | `/agent/place-search?keyword=&lat=&lng=&city=` | 公开，地点联想（百度 suggestion） |
+**需 JWT 的会话接口**
+
+- `POST /agent/session/create`：建会话，存任务 → LLM/规则算建议 → 神秘加成 → 存库。
+- `POST /agent/session/import`：游客登录后把浏览器本地会话原样写入当前用户，返回新旧 ID 映射。
+- `GET /agent/sessions`：历史列表（SQL 层 userId 过滤）。
+- `GET /agent/stats`：统计聚合（会话数 / 执行数 / 接受率 / 模式分布 / 意愿 vs 完成）。
+- `GET /agent/session/:id`：会话详情，校验归属。
+- `GET /agent/history/:id`：历史详情（会话 + 任务 + 反馈）。
+- `POST /agent/action/record`：行为反馈 upsert；`withReply:true` 时二次调 LLM 生成回应。
+- `DELETE /agent/session/:id`：级联删（待办 → 反馈 → 会话 → 任务）。
+- `DELETE /agent/sessions`：批量删，body `{ ids: number[] }`，逐个校验归属。
+
+**公开接口（含游客 LLM，共享 IP 限流 30/日）**
+
+- `POST /agent/session/guest-create`：游客建会话，只算不存库，sessionId 前端本地发号，返回 LLM 建议。
+- `POST /agent/session/guest-reply`：游客反馈二次回复，会话不落库，上下文由前端随请求带回。
+- `POST /agent/session/guest-checkin-reply`：游客打卡回应，仅按「任务内容 + 打卡感受」生成一句回应。
+- `GET /agent/answer-book`：答案之书（uapis.cn）。
+- `POST /agent/tarot`：塔罗抽 1 张（妖狐 API + 本地兜底），body `{ topicId?: number }`。
+- `GET /agent/weather?city=武汉`：今日天气（whyta.cn）；**也支持 `?lat=&lng=`**，先百度逆地理（WGS84）转城市再查；未配置 key / 定位失败时 `data:null`。
+- `GET /agent/cities`：省市两级联动（mxnzp，31 省 341 市，缓存 24h）。
+- `GET /agent/place-search?keyword=&lat=&lng=&city=`：地点联想（百度 `place/v2/suggestion`），有坐标按距离排序，无坐标但有城市只搜该市。
+
+**游客限流**：内存滑动窗口（Map<string, number[]>），覆盖 guest-create / guest-reply / guest-checkin-reply 三个接口共享 30 次/日/IP；登录接口不受影响；单实例部署够用，多实例需 Redis 方案。
 
 ### 2.2 LLM 建议链路
 
@@ -81,13 +116,11 @@
 
 **劝说模式（3 选 1）**
 
-| 模式 | 适用场景 |
-| --- | --- |
-| 激将 | 不想做但该做（意愿 ≤4 且重要度 ≥7） |
-| 温柔 | 想做但做不动（精力 ≤4） |
-| 理性 | 需要权衡决断 |
+- **激将**：不想做但该做（意愿 ≤4 且重要度 ≥7）。
+- **温柔**：想做但做不动（精力 ≤4）。
+- **理性**：需要权衡决断。
 
-prompt 写明心理阻力判定标准 + 数值信号，并要求三种模式频率均衡。**三个模式只决定结论如何表达，不决定方向——先独立判断 `shouldGo`，再选语气；结论为「暂缓」时也用该模式的语气说明暂缓的理由。**
+模式只决定语气表达，不决定结论方向——先独立判断 `shouldGo`，再选最能表达该结论的模式。结论为「暂缓」时，也用该模式的语气说明暂缓的理由。prompt 写明心理阻力判定标准 + 数值信号，并要求三种模式频率均衡。
 
 **决策前五维权衡（2026-10-26 新增）**
 
@@ -144,22 +177,18 @@ prompt 写明心理阻力判定标准 + 数值信号，并要求三种模式频�
 
 **接口**
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/memory` | 全部记忆（`updatedAt` 倒序） |
-| GET | `/memory/summary` | LLM 综合论述（2-3 句，30min 内容哈希缓存） |
-| GET | `/memory/insight?refresh=1` | 探索手册（2~3 章场景叙事 + 开导 + 自问） |
-| POST/PATCH/DELETE | `/memory[/:id]` | 手动增改删 |
+- `GET /memory`：全部记忆（`updatedAt` 倒序）。
+- `GET /memory/summary`：LLM 综合论述（2-3 句整体画像，30min 内容哈希缓存）。
+- `GET /memory/insight?refresh=1`：探索手册（2~3 章场景叙事 + 开导 + 自问，禁罗列数据）；手动刷新 10min 节流。
+- `POST /memory`、`PATCH /memory/:id`、`DELETE /memory/:id`：手动增改删。
 
 **表结构 `user_memory`**
 
-| 字段 | 说明 |
-| --- | --- |
-| `memory_type` | 记忆类型 |
-| `content` | 内容 |
-| `confidence` | 0~1 |
-| `memory_key` | 可空，LLM upsert 键 |
-| `keyword` | 可空，3-5 字汉字标签（统计页气泡用） |
+- `memory_type`：记忆类型。
+- `content`：内容。
+- `confidence`：0~1。
+- `memory_key`：可空，LLM upsert 键（同 key 豁免 Dice 去重，允许老记忆被改写）。
+- `keyword`：可空，3-5 字汉字标签（`/^[一-龥]{3,5}$/`，不合法置 null 不丢条；统计页气泡用）。
 
 **3.4 规则引擎（`behavior-memory.service.ts`）**
 
@@ -200,17 +229,15 @@ prompt 写明心理阻力判定标准 + 数值信号，并要求三种模式频�
 
 **Todo 接口**
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/todos` | 未归档（未完成 + 已完成） |
-| GET | `/todos/archived` | 已归档 |
-| POST | `/todos` | 新建，自动算 `checkinDueAt` |
-| PATCH | `/todos/:id` | 更新（`done=true` 写 `completedAt`） |
-| PATCH | `/todos/:id/archive` | 单条归档 |
-| DELETE | `/todos/clear-done` | 批量归档全部已完成 |
-| DELETE | `/todos/:id` | 移出计划表（物理删除） |
-| POST | `/todos/:id/reflect` | 完成打卡 + Agent 回应 |
-| POST | `/todos/:id/postpone` | 答「还没」顺延 |
+- `GET /todos`：未归档（含未完成 + 已完成）。
+- `GET /todos/archived`：已归档。
+- `POST /todos`：新建，自动算 `checkinDueAt`。
+- `PATCH /todos/:id`：更新（`done=true` 写 `completedAt`）。
+- `PATCH /todos/:id/archive`：单条归档。
+- `DELETE /todos/clear-done`：批量归档全部已完成。
+- `DELETE /todos/:id`：移出计划表（物理删除）。
+- `POST /todos/:id/reflect`：完成打卡 + Agent 回应（两阶段弹窗，评价不写也能跳过）。
+- `POST /todos/:id/postpone`：答「还没」顺延。
 
 **提醒规则（2026-10-25 调整）**
 
@@ -251,16 +278,15 @@ prompt 写明心理阻力判定标准 + 数值信号，并要求三种模式频�
 
 **页面**
 
-| 页面 | 要点 |
-| --- | --- |
-| `Dashboard.vue` | 计划表 + 历史会话分类抽屉（默认全折叠）+ 管理模式批量删除；顶部「到点问问」卡 |
-| `TaskCreate.vue` | 分类按钮 + 三滑块 + 耗时/截止/地点；神秘加成三开关；购物钱包面板；**二选一模式**；两个 `SketchTooltip` 提示 |
-| `SessionResult.vue` | 标题「结果」；反馈区；按待办状态显示 5 种文案；已移除历史摘要 |
-| `Stats.vue` | 墨圈气泡 + LLM 论述 + 五个统计板块（纯 SVG）+ 归档记录抽屉 |
-| `MemoryKeywords.vue` | 「自我探索」页，关键词 / 探索手册双页切换（移动端可滑动） |
-| `Register.vue` | 注册成功 → 偏好问卷（3 步）→ 新手引导 |
-| `Login.vue` | 已登录访问 `/login` 自动跳 `redirect` |
-| `NotFound.vue` | 404 手绘卡片 + 回首页；路由末尾 `/:pathMatch(.*)*` |
+- `Dashboard.vue`：计划表 + 历史会话分类抽屉（默认全折叠）+ 管理模式批量删除；顶部「到点问问」卡（`checkinDueAt <= now` 的未完成待办）。
+- `TaskCreate.vue`：分类按钮 + 三滑块 + 耗时 / 截止 / 地点（`SketchPlacePicker`）；神秘加成三开关（答案之书默认开）；购物钱包面板；**二选一模式**（自动切 A/B + 倾向滑块）；两个 `SketchTooltip` 提示「纠结内容」「前提条件」。
+- `SessionResult.vue`：标题「结果」；反馈区（可选评论 + 接受先追问是否入表）；按待办状态显示 5 种文案；已移除历史摘要。
+- `Stats.vue`：墨圈气泡 + LLM 论述 + 五个统计板块（纯 SVG，零三方图表库）+ 归档记录抽屉（按分类分组，默认全折叠，条数显示，每条带 ✕ 删除 + 手绘确认框）。
+- `MemoryKeywords.vue`：更名「自我探索」页，关键词 / 探索手册双页切换（移动端可滑动，过渡动画）；老用户可随时编辑偏好。
+- `Register.vue`：注册成功签发 JWT；偏好问卷（3 步）→ 新手引导（由 App.vue 监听 guideOpen 关闭后弹出，避免 Register 卸载时 watch 销毁）。
+- `Login.vue`：已登录访问 `/login` 自动跳 `?redirect=` 参数指定的目标页；邮件链接带 `?redirect=/`。
+- `ForgotPassword.vue`：找回密码，邮箱验证码 + 重置。
+- `NotFound.vue`：404 手绘卡片 + 回首页；路由末尾 `/:pathMatch(.*)*` 兜底。
 
 **新手引导**
 
@@ -299,10 +325,13 @@ prompt 写明心理阻力判定标准 + 数值信号，并要求三种模式频�
 
 ## 3. 变更日志（新的在上）
 
-### 3.1 2026-10-26（当前工作区，未提交）
+### 3.1 2026-10-28（当前工作区，未提交）
 
 **新增**
 
+- **游客模式**：完整闭环——`POST /agent/session/guest-create` / `guest-reply` / `guest-checkin-reply` 三条公开接口（共享 IP 限流 30/日，内存滑动窗口）；前端本地存会话（`guestStorage.ts` / `guestMigration.ts`）；登录后 `POST /agent/session/import` 批量落库并返回新旧 ID 映射。
+- **批量删会话**：`DELETE /agent/sessions`，body `{ ids: number[] }`，逐个校验归属。
+- **忘记密码页**：`ForgotPassword.vue`（路由 `/forgot-password`），邮箱验证码 + 重置。
 - **二选一模式**：`TaskCreate` 新增「这是二选一」勾选，自动按「还是/或者」切 A/B，配 1~10 倾向滑块并实时显示倾向文字。
 - **自我探索页**：`MemoryKeywords` 更名，新增「关键词 / 探索手册」双页切换与过渡动画。
 - **探索手册**：后端 `GET /api/memory/insight` + `memory-insight.prompt.ts`，Redis 快照 180 天、7 天自动重写。
@@ -310,8 +339,10 @@ prompt 写明心理阻力判定标准 + 数值信号，并要求三种模式频�
 
 **优化**
 
+- **HANDOFF.md 重排**：9 张表格全部改成文字描述；补全游客模式链路、环境变量完整清单、ForgotPassword 页、批量删接口、天气 lat/lng 逆地理、Vite 端口锁 5174。
 - **全局字体换衬线**：Google Fonts 从 `Inter + Noto Sans SC` 换成 `Noto Serif SC`（可变字重 200–900）；`tailwind.config.ts` 三族 `sans/sc/en` 统一改为 serif 栈；SVG 内联 `font-family`（`SketchClock`、`Stats`）同步改，不再加载 Inter。
 - **LLM prompt 重构**：给出结论前强制内部完成「收益 / 成本 / 风险后悔 / 当前状态 / 用户偏好」五维权衡，禁止先默认「应该去做」再找理由；偏好不只改语气，参与成本收益相对权重；`persuadeMode` 明确只决定表达，不决定结论方向；新增 `shouldGo=false` 的完整 JSON 示例。
+- **天气接口补逆地理**：`GET /agent/weather` 新增 `lat&lng` 查询参数，先百度逆地理（WGS84）转城市再查。
 - 提醒规则：有 DDL 时 `checkinDueAt` 直接取截止时刻；cron 改为每分钟扫。
 - 邮件扫描加日志，到点 1 分钟内送达。
 - 金额字段支持两位小数（价格下限 0.01），影响 `itemPrice` / `walletBalance`。
@@ -400,12 +431,11 @@ prompt 写明心理阻力判定标准 + 数值信号，并要求三种模式频�
 
 ## 4. 已知限制
 
-| 问题 | 状态 | 说明 |
-| --- | --- | --- |
-| ts-jest 单测全挂 | 已知限制 | 项目级 `rootDir` 配置问题，与业务无关 |
-| 浏览器定位成功率低 | 已兜底 | 地点搜索三级兜底 |
-| 服务器部署加固 | 待做 | HTTPS、防火墙、关闭 `synchronize` |
-| 探索手册联调 | 待验证 | 依赖新接口，尚未实测 |
+- **ts-jest 单测全挂**：项目级 `rootDir` 配置问题，与业务代码无关。
+- **浏览器定位成功率低**：已由地点搜索三级兜底覆盖（坐标 → 天气选过的城市 → 全国）。
+- **游客限流是内存滑动窗口**：单实例部署够用；多实例 / 重启后计数归零，若部署多实例需 Redis 方案。
+- **服务器部署加固**：待做 HTTPS、防火墙只开 22/80/443、生产关闭 `DB_SYNCHRONIZE`。
+- **探索手册联调**：依赖新接口 `GET /memory/insight`，尚未实测全链路。
 
 ---
 

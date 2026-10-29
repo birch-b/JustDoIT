@@ -15,6 +15,10 @@ export class Visit {
   @Column({ type: 'int', nullable: true })
   userId: number | null;
 
+  /** 浏览器游客标识（前端 localStorage 生成）；用于区分具体是哪位游客 */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  visitorId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

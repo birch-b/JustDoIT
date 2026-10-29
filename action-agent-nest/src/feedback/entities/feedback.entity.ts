@@ -11,9 +11,13 @@ export class Feedback {
   @PrimaryGeneratedColumn()
   id: number;
 
-  /** 提交人 userId（必须登录才能反馈） */
-  @Column()
-  userId: number;
+  /** 提交人 userId；游客提交为 null（配合 visitorId 识别是谁） */
+  @Column({ type: 'int', nullable: true })
+  userId: number | null;
+
+  /** 游客浏览器标识；登录用户提交时为 null */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  visitorId: string | null;
 
   /** 反馈内容，最多 1000 字（DTO 层校验） */
   @Column({ type: 'text' })

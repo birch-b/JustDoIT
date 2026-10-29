@@ -9,11 +9,26 @@ export interface AdminOverview {
   totalVisits: number;
   todayVisits: number;
   todayActiveUsers: number;
+  /** 游客（匿名访客）去重总数 */
+  totalGuests: number;
+  /** 今日到访游客数 */
+  todayGuests: number;
   activeUsers: { username: string; lastActiveAt: string }[];
+  activeGuests: AdminGuestItem[];
+}
+
+export interface AdminGuestItem {
+  visitorId: string;
+  name: string;
+  firstVisitAt: string;
+  lastVisitAt: string;
+  visitCount: number;
 }
 
 export interface AdminFeedbackItem {
   id: number;
+  /** true=游客提交（username 为游客标识） */
+  isGuest: boolean;
   username: string;
   content: string;
   createdAt: string;
@@ -46,6 +61,9 @@ export const adminApi = {
   },
   users() {
     return authRequest<AdminUserItem[]>(`${BASE}/users`);
+  },
+  guests() {
+    return authRequest<AdminGuestItem[]>(`${BASE}/guests`);
   },
   feedbacks() {
     return authRequest<AdminFeedbackItem[]>(`${BASE}/feedbacks`);

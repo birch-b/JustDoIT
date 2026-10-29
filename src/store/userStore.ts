@@ -4,6 +4,7 @@ import { userApi, type AuthRes, type UserPreference } from "@/api/userApi";
 import { useAgentStore } from "@/store/agentStore";
 import { useTodoStore } from "@/store/todoStore";
 import { migrateGuestData } from "@/utils/guestMigration";
+import { guestStorage } from "@/utils/guestStorage";
 
 export interface UserInfo {
   id?: number;
@@ -19,6 +20,8 @@ interface State {
   currentUser: UserInfo | null;
   token: string | null;
   lastActiveAt: number; // 最近一次活跃时间戳（毫秒），滑动过期依据
+  /** 登录后检测到本地仍有游客数据：非空时弹窗询问是否同步到当前账号 */
+  guestPending: { sessions: number; todos: number } | null;
 }
 
 const CURRENT_KEY = "jdi_current_user";
@@ -30,6 +33,7 @@ export const useUserStore = defineStore("user", {
     currentUser: null,
     token: null,
     lastActiveAt: 0,
+    guestPending: null,
   }),
 
   getters: {
@@ -74,6 +78,7 @@ export const useUserStore = defineStore("user", {
       this.currentUser = null;
       this.token = null;
       this.lastActiveAt = 0;
+      this.guestPending = null;
       localStorage.removeItem(CURRENT_KEY);
     },
 
@@ -132,7 +137,7 @@ export const useUserStore = defineStore("user", {
       try {
         const res = await userApi.register(payload);
         this.setAuth(res);
-        await this.syncGuestData();
+        this.offerGuestSync();
         return { ok: true, msg: "注册成功" };
       } catch (e) {
         return { ok: false, msg: (e as Error).message };
@@ -150,7 +155,7 @@ export const useUserStore = defineStore("user", {
           password: payload.password,
         });
         this.setAuth(res);
-        await this.syncGuestData();
+        this.offerGuestSync();
         return { ok: true, msg: "登录成功" };
       } catch (e) {
         return { ok: false, msg: (e as Error).message };
@@ -158,8 +163,29 @@ export const useUserStore = defineStore("user", {
     },
 
     /**
-     * 登录/注册成功后：迁移浏览器里的游客数据（会话+待办）到当前账号，再刷新业务 store。
-     * 迁移内部静默失败（中断保留、下次登录重试），绝不阻塞登录流程。
+     * 登录/注册成功后：只检测本地是否有游客数据，有则交给用户决定是否同步。
+     * 不做自动迁移——否则登录任何已有账号都会把游客数据并入该账号。
+     */
+    offerGuestSync() {
+      const sessions = guestStorage.loadSessions().length;
+      const todos = guestStorage.loadTodos().length;
+      this.guestPending = sessions || todos ? { sessions, todos } : null;
+    },
+
+    /** 用户确认同步：迁移游客数据并刷新业务 store（失败静默中断，本地数据下次再试） */
+    async applyGuestSync() {
+      await this.syncGuestData();
+      this.guestPending = null;
+    },
+
+    /** 用户选择不同步：仅关闭提示，游客数据继续留在本地，退出登录后仍可查看 */
+    dismissGuestSync() {
+      this.guestPending = null;
+    },
+
+    /**
+     * 迁移浏览器里的游客数据（会话+待办）到当前账号，再刷新业务 store。
+     * 迁移内部静默失败（中断保留、下次重试），绝不阻塞登录流程。
      */
     async syncGuestData() {
       await migrateGuestData();

@@ -365,7 +365,7 @@ function goLogin() {
               您当前以游客身份使用，会话与计划仅保存在这台设备的浏览器里。更换设备或清理缓存将导致数据丢失。
             </div>
             <LinearButton size="sm" @click="goLogin">
-              <span>立即登录同步</span>
+              <span>登录后可同步</span>
             </LinearButton>
           </div>
         </SketchBorder>

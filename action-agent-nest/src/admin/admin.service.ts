@@ -8,6 +8,11 @@ import { Announcement } from './entities/announcement.entity';
 import { Visit } from './entities/visit.entity';
 import { UpsertAnnouncementDto } from './dto/upsert-announcement.dto';
 
+/** 游客显示名：visitorId 前 8 位，便于后台一眼区分不同访客 */
+function guestName(visitorId: string | null): string {
+  return visitorId ? `游客 ${visitorId.slice(0, 8)}` : '游客 未标识';
+}
+
 @Injectable()
 export class AdminService {
   constructor(
@@ -58,13 +63,58 @@ export class AdminService {
       lastActiveAt: r.lastActiveAt,
     }));
 
+    // 游客（匿名访问）：按 visitorId 去重计数，区分「有多少人临时来体验过」
+    const totalGuestsRaw = await this.visitRepo
+      .createQueryBuilder('v')
+      .select('COUNT(DISTINCT v.visitorId)', 'cnt')
+      .where('v.userId IS NULL')
+      .andWhere('v.visitorId IS NOT NULL')
+      .getRawOne<{ cnt: string }>();
+    const todayGuestsRaw = await this.visitRepo
+      .createQueryBuilder('v')
+      .select('COUNT(DISTINCT v.visitorId)', 'cnt')
+      .where('v.userId IS NULL')
+      .andWhere('v.visitorId IS NOT NULL')
+      .andWhere('v.createdAt >= :s', { s: todayStart })
+      .getRawOne<{ cnt: string }>();
+
     return {
       totalUsers,
       totalVisits,
       todayVisits,
       todayActiveUsers: Number(todayActiveRaw?.cnt ?? 0),
+      totalGuests: Number(totalGuestsRaw?.cnt ?? 0),
+      todayGuests: Number(todayGuestsRaw?.cnt ?? 0),
       activeUsers,
+      activeGuests: (await this.guestList()).slice(0, 20),
     };
+  }
+
+  /** 游客访问列表：按 visitorId 聚合（匿名访问），含首次/最后访问与访问次数 */
+  async guestList() {
+    const rows = await this.visitRepo
+      .createQueryBuilder('v')
+      .select('v.visitorId', 'visitorId')
+      .addSelect('MIN(v.createdAt)', 'firstVisitAt')
+      .addSelect('MAX(v.createdAt)', 'lastVisitAt')
+      .addSelect('COUNT(v.id)', 'visitCount')
+      .where('v.userId IS NULL')
+      .andWhere('v.visitorId IS NOT NULL')
+      .groupBy('v.visitorId')
+      .orderBy('lastVisitAt', 'DESC')
+      .getRawMany<{
+        visitorId: string;
+        firstVisitAt: Date;
+        lastVisitAt: Date;
+        visitCount: string;
+      }>();
+    return rows.map((r) => ({
+      visitorId: r.visitorId,
+      name: guestName(r.visitorId),
+      firstVisitAt: r.firstVisitAt,
+      lastVisitAt: r.lastVisitAt,
+      visitCount: Number(r.visitCount ?? 0),
+    }));
   }
 
   /** 用户列表：全部用户 + 最后活跃时间 + 状态（7天内有访问=活跃，更早=沉默，无记录=未活跃） */
@@ -97,20 +147,26 @@ export class AdminService {
     });
   }
 
-  /** 反馈收集：倒序带用户名，最多 100 条 */
+  /** 反馈收集：倒序带提交人（注册用户显示用户名，游客显示游客标识），最多 100 条 */
   async feedbackList() {
     const list = await this.feedbackRepo.find({
       order: { createdAt: 'DESC' },
       take: 100,
     });
-    const ids = [...new Set(list.map((f) => f.userId))];
+    const ids = [
+      ...new Set(list.map((f) => f.userId).filter((id): id is number => id !== null)),
+    ];
     const users = ids.length
       ? await this.userRepo.find({ where: { id: In(ids) } })
       : [];
     const nameMap = new Map(users.map((u) => [u.id, u.username]));
     return list.map((f) => ({
       id: f.id,
-      username: nameMap.get(f.userId) ?? `#${f.userId}`,
+      isGuest: f.userId === null,
+      username:
+        f.userId === null
+          ? guestName(f.visitorId)
+          : (nameMap.get(f.userId) ?? `#${f.userId}`),
       content: f.content,
       createdAt: f.createdAt,
     }));
@@ -154,9 +210,9 @@ export class AdminService {
     return { ok: true };
   }
 
-  /** 访问上报：每会话一条，登录带 userId */
-  async trackVisit(userId: number | null) {
-    await this.visitRepo.save(this.visitRepo.create({ userId }));
+  /** 访问上报：每会话一条；登录带 userId，游客带 visitorId（后台据此区分谁在临时访问） */
+  async trackVisit(userId: number | null, visitorId: string | null) {
+    await this.visitRepo.save(this.visitRepo.create({ userId, visitorId }));
     return { ok: true };
   }
 }

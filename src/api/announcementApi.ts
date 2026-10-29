@@ -1,5 +1,6 @@
 // 用户端公告 API + 访问上报
 import { authRequest } from "@/api/http";
+import { getVisitorId } from "@/utils/visitorId";
 
 export interface AnnouncementItem {
   type: "new" | "improve" | "fix";
@@ -25,18 +26,10 @@ export function getAnnouncements() {
   return authRequest<Announcement[]>("/api/announcements");
 }
 
-/** 访问上报：每会话一次，尽力而为，静默失败 */
+/** 访问上报：每会话一次，尽力而为，静默失败；带 visitorId 以便后台区分游客 */
 export function trackVisit() {
-  const raw = localStorage.getItem("jdi_current_user");
-  let token: string | null = null;
-  try {
-    token = raw ? (JSON.parse(raw)?.token ?? null) : null;
-  } catch {
-    token = null;
-  }
-  if (token) {
-    authRequest("/api/track/visit", { method: "POST" }).catch(() => {});
-  } else {
-    fetch("/api/track/visit", { method: "POST" }).catch(() => {});
-  }
+  authRequest("/api/track/visit", {
+    method: "POST",
+    body: JSON.stringify({ visitorId: getVisitorId() }),
+  }).catch(() => {});
 }

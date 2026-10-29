@@ -12,9 +12,10 @@ export class FeedbackService {
     private readonly feedbackRepo: Repository<Feedback>,
   ) {}
 
-  async create(userId: number, dto: CreateFeedbackDto) {
+  async create(userId: number | null, dto: CreateFeedbackDto) {
     const feedback = this.feedbackRepo.create({
       userId,
+      visitorId: userId === null ? (dto.visitorId?.trim() || null) : null,
       content: dto.content.trim(),
     });
     await this.feedbackRepo.save(feedback);
