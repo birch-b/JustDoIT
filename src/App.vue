@@ -10,6 +10,10 @@ import PreferenceQuestionnaire, {
 import FloatingHelpButton from "@/components/onboarding/FloatingHelpButton.vue";
 import GuestSyncPrompt from "@/components/layout/GuestSyncPrompt.vue";
 import { trackVisit } from "@/api/announcementApi";
+import { useUserStore } from "@/store/userStore";
+import { getVisitorId } from "@/utils/visitorId";
+
+const userStore = useUserStore();
 
 const route = useRoute();
 // 登录/注册/找回密码页隐藏导航栏
@@ -23,13 +27,23 @@ watch(guideOpen, (v, oldV) => {
   }
 });
 
-// 访问上报：每会话一次（sessionStorage 去重），用于后台统计访问量与活跃时间
-onMounted(() => {
-  if (!sessionStorage.getItem("jdi_visited")) {
-    sessionStorage.setItem("jdi_visited", "1");
-    trackVisit();
-  }
+// 访问上报：同一身份在一个标签页会话内只报一次。
+// 身份按「登录用户 ID / 浏览器游客标识」区分——否则登录状态打开过页面后，
+// 再退出登录以游客使用就不会再上报，后台「今日游客」永远是 0。
+const visitIdentity = computed(() => {
+  const u = userStore.currentUser;
+  return u ? `user:${u.id ?? u.username}` : `guest:${getVisitorId()}`;
 });
+
+function reportVisit() {
+  if (sessionStorage.getItem("jdi_visited") === visitIdentity.value) return;
+  sessionStorage.setItem("jdi_visited", visitIdentity.value);
+  trackVisit();
+}
+
+onMounted(reportVisit);
+// 登录 / 退出登录时身份变化，补报一次，让后台能区分两类访问
+watch(visitIdentity, reportVisit);
 </script>
 
 <template>
